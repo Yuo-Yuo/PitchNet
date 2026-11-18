@@ -4061,7 +4061,11 @@ void MainComponent::getCommandInfo(juce::CommandID commandID,
 
   case CommandIDs::saveProject:
     result.setInfo(TR("command.save_project"), TR("command.save_project.desp"), TR("menu.file"), 0);
-    result.addDefaultKeypress('s', primaryModifier);
+    // In plugin mode, leave the host's project-save shortcut unclaimed.
+    // The processor's getStateInformation/setStateInformation and ARA
+    // document persistence remain responsible for saving/restoring plugin data.
+    if (!isPluginMode())
+      result.addDefaultKeypress('s', primaryModifier);
     result.setActive(project != nullptr);
     break;
 
