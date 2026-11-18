@@ -5,7 +5,6 @@
   "dialog.dont_save": "保存しない",
   "dialog.save_failed": "保存に失敗しました",
   "dialog.project_save_failed": "プロジェクトを保存できませんでした。別の場所をお試しください。",
-
   "pitch_drawing.apply_prompt": "新しいピッチカーブを適用しますか？",
   "canvas.pitch_drawing": "描画",
   "canvas.select": "選択",
@@ -295,5 +294,24 @@
   "update.download_now": "今すぐダウンロード",
   "update.message": "PitchNet の新しいバージョンがあります。ダウンロードしますか？",
   "update.skip_version": "このバージョンをスキップ",
-  "update.title": "アップデートがあります"
+  "update.title": "アップデートがあります",
+  "inspector.variaudio": "ツール",
+  "inspector.editor_scale": "エディタースケール",
+  "inspector.use_project_key": "プロジェクトのキー",
+  "inspector.snap_scale": "スケールに吸着",
+  "inspector.snap_mode": "ピッチスナップモード",
+  "inspector.snap_absolute": "絶対",
+  "inspector.snap_relative": "相対",
+  "inspector.snap_off": "オフ",
+  "inspector.smart_controls": "スマートコントロール",
+  "inspector.smart_default": "既定",
+  "inspector.smart_all_short": "すべて",
+  "inspector.correct_pitch": "ピッチを補正",
+  "inspector.flatten_curve": "カーブを平坦化",
+  "inspector.pitch_drift": "ピッチドリフト",
+  "inspector.shift_formant": "フォルマントをシフト",
+  "inspector.volume": "ボリューム",
+  "inspector.target_none": "セグメントがありません",
+  "inspector.target_selected": "対象: 選択中の {n} セグメント",
+  "inspector.target_all": "対象: すべてのセグメント ({n})"
 }
