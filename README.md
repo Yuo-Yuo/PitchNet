@@ -18,6 +18,8 @@ Yuo Tune is a standalone app and audio plugin for editing vocal pitch in a piano
 ## Features
 
 - Piano roll editing with select, split, pitch drawing, and timing modes
+- VariAudio-style smart pitch controls: Correct Pitch, Flatten Curve, Pitch Drift, Formant, and Volume
+- Scale-aware harmony buttons for diatonic thirds, fourths, fifths, sixths, and octaves
 - Neural pitch detection (FCPE default, RMVPE optional)
 - GAME-based note segmentation with D3PM diffusion model
 - Pitch curve editing with per-note delta, scale, offset, tilt, and variance controls
