@@ -145,6 +145,7 @@ public:
   void setScaleModePreview(std::optional<ScaleMode> mode);
   void setSnapToSemitoneDrag(bool enabled);
   void setDragSnapMode(DragSnapMode mode);
+  void setAbsoluteDragSnap(bool absolute);
   void setPitchReferenceHz(int hz);
   void setTimelineDisplayMode(TimelineDisplayMode mode);
 
