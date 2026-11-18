@@ -5,7 +5,6 @@
   "dialog.dont_save": "Discard",
   "dialog.save_failed": "Save failed",
   "dialog.project_save_failed": "The project could not be saved. Please try another location.",
-
   "pitch_drawing.apply_prompt": "Apply new pitch curve?",
   "canvas.pitch_drawing": "Drawing",
   "canvas.select": "Select",
@@ -337,5 +336,24 @@
   "update.download_now": "Download Now",
   "update.message": "A new version of PitchNet is available. Would you like to download it?",
   "update.skip_version": "Skip This Version",
-  "update.title": "Update Available"
+  "update.title": "Update Available",
+  "inspector.variaudio": "Tools",
+  "inspector.editor_scale": "Editor Scale",
+  "inspector.use_project_key": "Use Project Key",
+  "inspector.snap_scale": "Snap to scale",
+  "inspector.snap_mode": "Pitch Snap Mode",
+  "inspector.snap_absolute": "Absolute",
+  "inspector.snap_relative": "Relative",
+  "inspector.snap_off": "Off",
+  "inspector.smart_controls": "Smart Controls",
+  "inspector.smart_default": "Default",
+  "inspector.smart_all_short": "All",
+  "inspector.correct_pitch": "Correct Pitch",
+  "inspector.flatten_curve": "Flatten Curve",
+  "inspector.pitch_drift": "Pitch Drift",
+  "inspector.shift_formant": "Shift Formant",
+  "inspector.volume": "Volume",
+  "inspector.target_none": "No segments",
+  "inspector.target_selected": "Target: {n} selected segment(s)",
+  "inspector.target_all": "Target: all segments ({n})"
 }
