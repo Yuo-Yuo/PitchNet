@@ -22,6 +22,7 @@ public:
     void resized() override;
 
     void setMainContent(juce::Component* content);
+    void setInspectorContent(juce::Component* content, int width);
     void addPanel(const juce::String& id, const juce::String& title,
                   juce::Component* content,
                   bool initiallyVisible = false);
@@ -75,6 +76,8 @@ private:
     juce::String leftPanelId;
 
     juce::Component* mainContent = nullptr;
+    juce::Component* inspectorContent = nullptr;
+    int inspectorWidth = 0;
     int panelContainerWidth = 250;
     // Left panel: two thirds of the right one, plus 15px.
     int leftPanelWidth = panelContainerWidth * 2 / 3 + 15;
