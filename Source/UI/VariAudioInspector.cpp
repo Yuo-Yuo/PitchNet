@@ -315,8 +315,6 @@ VariAudioInspector::VariAudioInspector()
     };
     content.addAndMakeVisible(snapScaleToggle);
 
-    harmonyPanel.getCurrentProject = [this] { return getCurrentProject ? getCurrentProject() : nullptr; };
-    content.addAndMakeVisible(harmonyPanel);
 
     refreshLocalisedText();
     // Selection, snap state and values change from many places (canvas,
@@ -522,7 +520,7 @@ void VariAudioInspector::paintContent(juce::Graphics& g)
 int VariAudioInspector::getContentHeight() const
 {
     return kPadY + kVariAudioCardHeight + kPadY + kEditorScaleCardHeight +
-           harmonyPanel.getPreferredHeight() + kPadY;
+           kPadY;
 }
 
 void VariAudioInspector::resized()
@@ -574,9 +572,5 @@ void VariAudioInspector::layoutContent(int width)
     scaleCard.removeFromTop(kRowGap);
     snapScaleToggle.setBounds(scaleCard.removeFromTop(kToggleHeight));
 
-    // HarmonyPanel pads itself like the side-panel cards; give it the column.
-    area.setX(area.getX() - kPadX);
-    area.setWidth(width);
-    harmonyPanel.setBounds(area.removeFromTop(harmonyPanel.getPreferredHeight()));
     content.repaint();
 }
