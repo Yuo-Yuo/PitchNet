@@ -631,6 +631,11 @@ jobs:
             mv Yuo-Tune-macOS-AU/*.zip ./Yuo-Tune-macOS-AU.zip || true
           fi
 
+          # Publish the Windows installer alongside the other release assets
+          if [ -f "Yuo-Tune-Windows-Installer/Yuo-Tune-Setup.exe" ]; then
+            cp "Yuo-Tune-Windows-Installer/Yuo-Tune-Setup.exe" "./Yuo-Tune-Setup.exe"
+          fi
+
           # Linux tarballs are already ready
           if [ -d "Yuo-Tune-Linux" ]; then
             mv Yuo-Tune-Linux/*.tar.gz ./Yuo-Tune-Linux.tar.gz || true
@@ -654,6 +659,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
+            artifacts/Yuo-Tune-Setup.exe
             artifacts/Yuo-Tune-Windows-CPU.zip
             artifacts/Yuo-Tune-Windows-CPU-NoModels.zip
             artifacts/Yuo-Tune-Windows-DirectML.zip
