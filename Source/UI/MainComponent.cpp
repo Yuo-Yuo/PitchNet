@@ -830,6 +830,8 @@ MainComponent::MainComponent(bool enableAudioDevice)
   variAudioInspector.onSnapModeChanged = [this](VariAudioInspector::SnapMode mode)
   {
     pianoRoll.setSnapToSemitoneDrag(mode != VariAudioInspector::SnapMode::Off);
+    if (mode != VariAudioInspector::SnapMode::Off)
+      pianoRoll.setAbsoluteDragSnap(mode == VariAudioInspector::SnapMode::Absolute);
     parameterPanel.updateGlobalSliders();
     variAudioInspector.refresh();
   };
