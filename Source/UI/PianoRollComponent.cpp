@@ -2235,17 +2235,13 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent &e)
     return;
   }
 
-  // Middle-mouse scrub: click-and-drag anywhere in the timeline/canvas
-  // (ruler or note area) to move the playback cursor, mirroring Reaper's
-  // own middle-button scrub. Takes priority over every other gesture so
-  // held modifier keys never redirect it into zoom/pan.
+  // Middle-button drag pans the canvas without moving the playback cursor.
+  // This takes priority over tool gestures, including when modifier keys are held.
   if (e.mods.isMiddleButtonDown() && e.x >= pianoKeysWidth)
   {
-    middleButtonScrubActive = true;
-    double time = std::max(getTimelineStart(), xToTime(adjustedX));
-    setCursorTime(time);
-    if (onSeek)
-      onSeek(time);
+    modifierPanDragActive = true;
+    modifierPanLastPosition = e.position;
+    setMouseCursor(juce::MouseCursor::DraggingHandCursor);
     return;
   }
 
@@ -2398,15 +2394,6 @@ void PianoRollComponent::mouseDrag(const juce::MouseEvent &e)
     return;
   if (swallowGestureUntilMouseUp)
     return;
-  if (middleButtonScrubActive)
-  {
-    float adjustedX = e.x - pianoKeysWidth + static_cast<float>(scrollX);
-    double time = std::max(getTimelineStart(), xToTime(adjustedX));
-    setCursorTime(time);
-    if (onSeek)
-      onSeek(time);
-    return;
-  }
 
   if (modifierZoomDragActive)
   {
@@ -2459,11 +2446,6 @@ void PianoRollComponent::mouseUp(const juce::MouseEvent &e)
   if (swallowGestureUntilMouseUp)
   {
     swallowGestureUntilMouseUp = false;
-    return;
-  }
-  if (middleButtonScrubActive)
-  {
-    middleButtonScrubActive = false;
     return;
   }
 
@@ -4595,7 +4577,18 @@ void PianoRollComponent::drawSelectionRect(juce::Graphics &g)
   g.setColour(juce::Colours::white.withAlpha(0.05f));
   g.fillRect(rect);
 
-  // Draw border
-  g.setColour(juce::Colours::white.withAlpha(0.25f));
+  // Draw a subtle hatched fill so the selection area remains visible over
+  // both the waveform and the piano-roll grid.
+  {
+    juce::Graphics::ScopedSaveState saveState(g);
+    g.reduceClipRegion(rect.toNearestInt());
+    g.setColour(juce::Colours::white.withAlpha(0.22f));
+    const float hatchSpacing = 8.0f;
+    for (float x = rect.getX() - rect.getHeight(); x < rect.getRight(); x += hatchSpacing)
+      g.drawLine(x, rect.getBottom(), x + rect.getHeight(), rect.getY(), 1.0f);
+  }
+
+  // Draw border above the hatching.
+  g.setColour(juce::Colours::white.withAlpha(0.45f));
   g.drawRect(rect, 1.0f);
 }
