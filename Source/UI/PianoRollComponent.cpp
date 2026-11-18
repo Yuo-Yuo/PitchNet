@@ -3613,6 +3613,166 @@ bool PianoRollComponent::nudgeSelectedNotesBySemitones(int semitoneDelta)
   return true;
 }
 
+bool PianoRollComponent::shiftNotesBySemitones(
+    const std::vector<Note *> &targets,
+    const std::function<std::optional<float>(const Note &)> &shiftForNote)
+{
+  if (project == nullptr || targets.empty())
+    return false;
+
+  const auto &selectedNotes = targets;
+
+  constexpr float minMidi = static_cast<float>(MIN_MIDI_NOTE);
+  constexpr float maxMidi = static_cast<float>(MAX_MIDI_NOTE);
+
+  std::vector<Note *> notesToMove;
+  std::vector<float> oldMidis;
+  std::vector<float> newMidis;
+  // Harmony and arrow-key moves keep the Correct Pitch reference (see
+  // NotePitch).
+  std::vector<float> oldSources;
+  std::vector<float> newSources;
+  notesToMove.reserve(selectedNotes.size());
+  oldMidis.reserve(selectedNotes.size());
+  newMidis.reserve(selectedNotes.size());
+
+  int dirtyStartFrame = std::numeric_limits<int>::max();
+  int dirtyEndFrame = std::numeric_limits<int>::min();
+
+  for (auto *note : selectedNotes)
+  {
+    if (!note || note->isRest())
+      continue;
+
+    const auto semitoneDelta = shiftForNote(*note);
+    if (!semitoneDelta || std::abs(*semitoneDelta) < 1.0e-6f)
+      continue;
+
+    const float oldMidi = note->getMidiNote();
+    const float offset = note->getPitchOffset();
+    const float oldAdjustedMidi = oldMidi + offset;
+    const float movedAdjustedMidi =
+        juce::jlimit(minMidi, maxMidi,
+                     oldAdjustedMidi + *semitoneDelta);
+    const float movedMidi = movedAdjustedMidi - offset;
+
+    if (std::abs(movedMidi - oldMidi) <= 1.0e-6f)
+      continue;
+
+    notesToMove.push_back(note);
+    oldMidis.push_back(oldMidi);
+    newMidis.push_back(movedMidi);
+    oldSources.push_back(note->getLastNonMacroMidiNote());
+    newSources.push_back(NotePitch::sourceAfterEdit(
+        *project, *note, note->getLastNonMacroMidiNote(), oldMidi, movedMidi));
+    dirtyStartFrame = std::min(dirtyStartFrame, note->getStartFrame());
+    dirtyEndFrame = std::max(dirtyEndFrame, note->getEndFrame());
+  }
+
+  if (notesToMove.empty())
+    return false;
+
+  auto rebuildAndNotify =
+      [this, dirtyStartFrame, dirtyEndFrame](const std::vector<Note *> &)
+  {
+    if (project == nullptr)
+      return;
+
+    PitchCurveProcessor::rebuildBaseFromNotes(*project);
+    invalidateBasePitchCache();
+
+    project->markNoteEditDirtyRange(dirtyStartFrame, dirtyEndFrame);
+
+    if (onPitchEdited)
+      onPitchEdited();
+    if (onPitchEditFinished)
+      onPitchEditFinished();
+
+    repaint();
+  };
+
+  if (undoManager)
+  {
+    auto *projectPtr = project;
+    auto action = std::make_unique<MultiNoteMidiNudgeAction>(
+        notesToMove, oldMidis, newMidis,
+        [projectPtr, dirtyStartFrame,
+         dirtyEndFrame](const std::vector<Note *> &notes)
+        {
+          if (!projectPtr)
+            return;
+          PitchCurveProcessor::rebuildBaseFromNotes(*projectPtr);
+          for (auto *note : notes)
+            if (note)
+              note->markSynthDirty();
+          projectPtr->markNoteEditDirtyRange(dirtyStartFrame, dirtyEndFrame);
+        },
+        oldSources, newSources);
+    undoManager->addAction(std::move(action));
+  }
+
+  for (size_t i = 0; i < notesToMove.size(); ++i)
+  {
+    NotePitch::restore(*notesToMove[i], newMidis[i], newSources[i]);
+    notesToMove[i]->markDirty();
+    notesToMove[i]->markSynthDirty();
+  }
+
+  rebuildAndNotify(notesToMove);
+  return true;
+}
+
+HarmonyUtils::Result PianoRollComponent::applyHarmonyInterval(
+    HarmonyUtils::Interval interval, bool up)
+{
+  if (project == nullptr)
+    return HarmonyUtils::Result::NoNotes;
+
+  // Harmony follows the project key even when drag-snap is set to chromatic.
+  const ScaleMode keyMode = project->getPreferredScaleMode();
+  const int keyRoot = project->getScaleRootNote();
+  if (interval != HarmonyUtils::Interval::Octave &&
+      !HarmonyUtils::supportsDiatonicIntervals(keyMode, keyRoot))
+    return HarmonyUtils::Result::ScaleUnsupported;
+
+  // One click should turn a duplicated lead track into a harmony line, so an
+  // empty selection means "every note".
+  auto targets = project->getSelectedNotes();
+  if (targets.empty())
+    for (auto &note : project->getNotes())
+      targets.push_back(&note);
+
+  const int referenceHz = pitchReferenceHz;
+  int outOfRangeCount = 0;
+  const bool moved = shiftNotesBySemitones(
+      targets,
+      [interval, up, keyMode, keyRoot, referenceHz,
+       &outOfRangeCount](const Note &note) -> std::optional<float>
+      {
+        const float adjustedMidi = note.getAdjustedMidiNote();
+        const auto shift = HarmonyUtils::intervalShiftSemitones(
+            adjustedMidi, interval, up, keyMode, keyRoot, referenceHz);
+        if (!shift)
+          return std::nullopt;
+
+        // Clamping at the editor's range would land on an arbitrary,
+        // possibly out-of-key pitch, so such notes stay where they are.
+        const float target = adjustedMidi + static_cast<float>(*shift);
+        if (target < static_cast<float>(MIN_MIDI_NOTE) ||
+            target > static_cast<float>(MAX_MIDI_NOTE))
+        {
+          ++outOfRangeCount;
+          return std::nullopt;
+        }
+        return static_cast<float>(*shift);
+      });
+
+  if (outOfRangeCount > 0)
+    return moved ? HarmonyUtils::Result::PartlyOutOfRange
+                 : HarmonyUtils::Result::OutOfRange;
+  return moved ? HarmonyUtils::Result::Applied : HarmonyUtils::Result::NoNotes;
+}
+
 bool PianoRollComponent::keyPressed(const juce::KeyPress &key)
 {
   const auto mods = key.getModifiers();
