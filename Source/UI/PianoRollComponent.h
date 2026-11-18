@@ -6,6 +6,8 @@
 #include "../Utils/Constants.h"
 #include "../Utils/Localization.h"
 #include "../Utils/BasePitchPreview.h"
+#include "../Utils/TransformParams.h"
+#include "../Utils/HarmonyUtils.h"
 #include "../Undo/UndoActions.h"
 #include "Commands.h"
 #include "PianoRoll/BoxSelector.h"
@@ -96,6 +98,16 @@ public:
 
   // Project
   void setProject(Project *proj);
+  enum class InspectorParam { CorrectPitch, FlattenCurve, PitchDrift, Formant, Volume };
+  HarmonyUtils::Result applyHarmonyInterval(HarmonyUtils::Interval interval, bool up);
+  std::vector<Note *> getInspectorTargets() const;
+  std::optional<float> getInspectorValue(InspectorParam param) const;
+  void beginInspectorEdit(InspectorParam param);
+  void setInspectorEditValue(float value);
+  void endInspectorEdit();
+  bool isInspectorEditActive() const { return inspectorEditActive; }
+  void setShowAllSmartControls(bool showAll);
+  bool getShowAllSmartControls() const { return showAllSmartControls; }
   void beginLiveRecordingWaveform(double sampleRate,
                                   double timelineOffsetSeconds);
   void appendLiveRecordingWaveform(const juce::AudioBuffer<float> &buffer);
@@ -135,6 +147,7 @@ public:
   void setScaleModePreview(std::optional<ScaleMode> mode);
   void setSnapToSemitoneDrag(bool enabled);
   void setDragSnapMode(DragSnapMode mode);
+  void setAbsoluteDragSnap(bool absolute);
   void setPitchReferenceHz(int hz);
   void setTimelineDisplayMode(TimelineDisplayMode mode);
 
@@ -377,6 +390,8 @@ private:
   void setHoveredNote(Note *note);
   void updateScrollBars();
   bool nudgeSelectedNotesBySemitones(int semitoneDelta);
+  bool shiftNotesBySemitones(const std::vector<Note *> &targets,
+      const std::function<std::optional<float>(const Note &)> &shiftForNote);
   void reapplyBasePitchForNote(
       Note *note); // Recalculate F0 from base pitch + delta after undo/redo
 
@@ -566,7 +581,6 @@ private:
   bool modifierPanDragActive = false;
   juce::Point<float> modifierPanLastPosition;
   bool pianoKeyAuditionMouseDown = false;
-  bool middleButtonScrubActive = false;
   MainViewRegionPreviewList regionPreviews;
   bool trackViewMode = false;
   double regionPreviewsEndSeconds = 0.0;

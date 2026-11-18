@@ -1,8 +1,8 @@
-name: Build PitchNet
+name: Build Yuo Tune
 
 on:
   push:
-    branches: [main, master, refactor]
+    branches: [main, master, refactor, "feature/**"]
     tags:
       - "v*"
   pull_request:
@@ -35,10 +35,16 @@ jobs:
           Invoke-WebRequest -Uri "https://github.com/mdkrain/HachiTune/releases/download/Resources%2Fmodels/rmvpe.onnx" -OutFile "Resources/models/rmvpe.onnx"
 
       - name: Configure CMake
-        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DUSE_DIRECTML=OFF -DUSE_ASIO=ON -DENABLE_NOTE_STRETCH=OFF
+        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DUSE_DIRECTML=OFF -DUSE_ASIO=ON -DENABLE_NOTE_STRETCH=OFF -DPITCHNET_BUILD_TESTS=ON
 
-      - name: Build
-        run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
+      - name: Build app and VST3
+        run: cmake --build build --config ${{ env.BUILD_TYPE }} --target PitchNet PitchNetPlugin_VST3 --parallel
+
+      - name: Build regression tests
+        run: cmake --build build --config ${{ env.BUILD_TYPE }} --target PluginStateArchiveTests HarmonyIntervalTests HarmonyApplyTests --parallel
+
+      - name: Run ARA archive and harmony tests
+        run: ctest --test-dir build -C ${{ env.BUILD_TYPE }} --output-on-failure -R "PluginStateArchiveTests|HarmonyIntervalTests|HarmonyApplyTests"
 
       - name: Prepare Package
         shell: pwsh
@@ -48,13 +54,12 @@ jobs:
           # Copy standalone app
           Copy-Item -Path "build/PitchNet_artefacts/${{ env.BUILD_TYPE }}/*" -Destination "package/" -Recurse -Force
 
-          # Move VST3 binary next to the exe (avoid the VST3 folder packaging)
-          $vst3Binary = "build/PitchNetPlugin_artefacts/${{ env.BUILD_TYPE }}/VST3/PitchNet.vst3/Contents/x86_64-win/PitchNet.vst3"
-          if (Test-Path $vst3Binary) {
-            Copy-Item -Path $vst3Binary -Destination "package/PitchNet.vst3" -Force
-          } else {
-            Write-Warning "VST3 binary not found at $vst3Binary"
-          }
+          # Find the single-file Windows VST3 binary (bundle names can vary by JUCE version)
+          $vst3Binary = Get-ChildItem -Path "build/PitchNetPlugin_artefacts/${{ env.BUILD_TYPE }}/VST3" -Recurse -File -Filter "*.vst3" |
+            Where-Object { $_.FullName -match "x86_64-win" } |
+            Select-Object -First 1
+          if ($null -eq $vst3Binary) { throw "Windows VST3 binary was not produced" }
+          Copy-Item -Path $vst3Binary.FullName -Destination "package/Yuo Tune.vst3" -Force
 
           if (Test-Path "package/VST3") {
             Remove-Item -Recurse -Force "package/VST3"
@@ -71,17 +76,34 @@ jobs:
             New-Item -ItemType Directory -Force -Path "package-nomodels/models" | Out-Null
           }
 
+          # Normalize the standalone executable name in case JUCE keeps the CMake target name.
+          $appExe = Get-ChildItem -Path "package" -File -Filter "*.exe" | Select-Object -First 1
+          if ($null -eq $appExe) { throw "Standalone Yuo Tune executable was not produced" }
+          if ($appExe.Name -ne "Yuo Tune.exe") {
+            Rename-Item -Path $appExe.FullName -NewName "Yuo Tune.exe"
+          }
+          choco install innosetup --yes --no-progress
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=0.8.1 installer\YuoTune.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+
+      - name: Upload Windows Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Yuo-Tune-Windows-Installer
+          path: installer/Output/Yuo-Tune-Setup.exe
+          retention-days: 30
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PitchNet-Windows-CPU
+          name: Yuo-Tune-Windows-CPU
           path: package/
           retention-days: 30
 
       - name: Upload Artifact (No Models)
         uses: actions/upload-artifact@v4
         with:
-          name: PitchNet-Windows-CPU-NoModels
+          name: Yuo-Tune-Windows-CPU-NoModels
           path: package-nomodels/
           retention-days: 30
 
@@ -135,13 +157,12 @@ jobs:
           # Copy standalone app
           Copy-Item -Path "build/PitchNet_artefacts/${{ env.BUILD_TYPE }}/*" -Destination "package/" -Recurse -Force
 
-          # Move VST3 binary next to the exe (avoid the VST3 folder packaging)
-          $vst3Binary = "build/PitchNetPlugin_artefacts/${{ env.BUILD_TYPE }}/VST3/PitchNet.vst3/Contents/x86_64-win/PitchNet.vst3"
-          if (Test-Path $vst3Binary) {
-            Copy-Item -Path $vst3Binary -Destination "package/PitchNet.vst3" -Force
-          } else {
-            Write-Warning "VST3 binary not found at $vst3Binary"
-          }
+          # Find the single-file Windows VST3 binary (bundle names can vary by JUCE version)
+          $vst3Binary = Get-ChildItem -Path "build/PitchNetPlugin_artefacts/${{ env.BUILD_TYPE }}/VST3" -Recurse -File -Filter "*.vst3" |
+            Where-Object { $_.FullName -match "x86_64-win" } |
+            Select-Object -First 1
+          if ($null -eq $vst3Binary) { throw "Windows VST3 binary was not produced" }
+          Copy-Item -Path $vst3Binary.FullName -Destination "package/Yuo Tune.vst3" -Force
 
           if (Test-Path "package/VST3") {
             Remove-Item -Recurse -Force "package/VST3"
@@ -168,14 +189,14 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PitchNet-Windows-DirectML
+          name: Yuo-Tune-Windows-DirectML
           path: package/
           retention-days: 30
 
       - name: Upload Artifact (No Models)
         uses: actions/upload-artifact@v4
         with:
-          name: PitchNet-Windows-DirectML-NoModels
+          name: Yuo-Tune-Windows-DirectML-NoModels
           path: package-nomodels/
           retention-days: 30
 
@@ -223,38 +244,38 @@ jobs:
           mkdir -p package
 
           # Copy standalone app
-          cp -R "build/PitchNet_artefacts/${{ env.BUILD_TYPE }}/PitchNet.app" package/
+          cp -R "build/PitchNet_artefacts/${{ env.BUILD_TYPE }}/Yuo Tune.app" package/
 
           # Copy VST3 plugin
           if [ -d "build/PitchNetPlugin_artefacts/${{ env.BUILD_TYPE }}/VST3" ]; then
-            cp -R "build/PitchNetPlugin_artefacts/${{ env.BUILD_TYPE }}/VST3/PitchNet.vst3" package/
+            cp -R "build/PitchNetPlugin_artefacts/${{ env.BUILD_TYPE }}/VST3/Yuo Tune.vst3" package/
           fi
 
           # Copy AU plugin
           if [ -d "build/PitchNetPlugin_artefacts/${{ env.BUILD_TYPE }}/AU" ]; then
-            cp -R "build/PitchNetPlugin_artefacts/${{ env.BUILD_TYPE }}/AU/PitchNet.component" package/
+            cp -R "build/PitchNetPlugin_artefacts/${{ env.BUILD_TYPE }}/AU/Yuo Tune.component" package/
           fi
 
           # Create no-models package (keep models dirs, remove files)
           rm -rf package-nomodels
           cp -R package package-nomodels
           find package-nomodels -type d -name models -exec sh -c 'rm -rf "$1"/*' _ {} \;
-          mkdir -p package-nomodels/PitchNet.app/Contents/Resources/models
-          if [ -d "package-nomodels/PitchNet.vst3" ]; then
-            mkdir -p package-nomodels/PitchNet.vst3/Contents/Resources/models
+          mkdir -p package-nomodels/Yuo Tune.app/Contents/Resources/models
+          if [ -d "package-nomodels/Yuo Tune.vst3" ]; then
+            mkdir -p package-nomodels/Yuo Tune.vst3/Contents/Resources/models
           fi
-          if [ -d "package-nomodels/PitchNet.component" ]; then
-            mkdir -p package-nomodels/PitchNet.component/Contents/Resources/models
+          if [ -d "package-nomodels/Yuo Tune.component" ]; then
+            mkdir -p package-nomodels/Yuo Tune.component/Contents/Resources/models
           fi
 
       - name: Ad-hoc Code Sign
         run: |
-          codesign --force --deep -s - package/PitchNet.app || true
-          codesign --force --deep -s - package/PitchNet.vst3 || true
-          codesign --force --deep -s - package/PitchNet.component || true
-          codesign --force --deep -s - package-nomodels/PitchNet.app || true
-          codesign --force --deep -s - package-nomodels/PitchNet.vst3 || true
-          codesign --force --deep -s - package-nomodels/PitchNet.component || true
+          codesign --force --deep -s - package/Yuo Tune.app || true
+          codesign --force --deep -s - package/Yuo Tune.vst3 || true
+          codesign --force --deep -s - package/Yuo Tune.component || true
+          codesign --force --deep -s - package-nomodels/Yuo Tune.app || true
+          codesign --force --deep -s - package-nomodels/Yuo Tune.vst3 || true
+          codesign --force --deep -s - package-nomodels/Yuo Tune.component || true
 
       - name: Create DMG
         run: |
@@ -264,90 +285,90 @@ jobs:
             fi
           done
 
-          rm -f PitchNet-macOS.dmg PitchNet-macOS-NoModels.dmg
+          rm -f Yuo-Tune-macOS.dmg Yuo-Tune-macOS-NoModels.dmg
 
           hdiutil create -volname "PitchNet" \
             -srcfolder package \
             -ov -format UDZO \
-            PitchNet-macOS.dmg
+            Yuo-Tune-macOS.dmg
           hdiutil create -volname "PitchNet-NoModels" \
             -srcfolder package-nomodels \
             -ov -format UDZO \
-            PitchNet-macOS-NoModels.dmg
+            Yuo-Tune-macOS-NoModels.dmg
 
       - name: Create App ZIP
         run: |
           cd package
-          zip -r ../PitchNet-macOS-App.zip PitchNet.app
+          zip -r ../Yuo-Tune-macOS-App.zip Yuo Tune.app
           cd ../package-nomodels
-          zip -r ../PitchNet-macOS-App-NoModels.zip PitchNet.app
+          zip -r ../Yuo-Tune-macOS-App-NoModels.zip Yuo Tune.app
 
       - name: Create Plugin ZIPs
         run: |
           # VST3 with models
-          if [ -d "package/PitchNet.vst3" ]; then
-            cd package && zip -r ../PitchNet-macOS-VST3.zip PitchNet.vst3 && cd ..
+          if [ -d "package/Yuo Tune.vst3" ]; then
+            cd package && zip -r ../Yuo-Tune-macOS-VST3.zip Yuo Tune.vst3 && cd ..
           fi
           # AU with models
-          if [ -d "package/PitchNet.component" ]; then
-            cd package && zip -r ../PitchNet-macOS-AU.zip PitchNet.component && cd ..
+          if [ -d "package/Yuo Tune.component" ]; then
+            cd package && zip -r ../Yuo-Tune-macOS-AU.zip Yuo Tune.component && cd ..
           fi
 
       - name: Upload Artifact (DMG)
         uses: actions/upload-artifact@v4
         with:
-          name: PitchNet-macOS
-          path: PitchNet-macOS.dmg
+          name: Yuo-Tune-macOS
+          path: Yuo-Tune-macOS.dmg
           retention-days: 30
 
       - name: Upload Artifact (DMG, No Models)
         uses: actions/upload-artifact@v4
         with:
-          name: PitchNet-macOS-NoModels
-          path: PitchNet-macOS-NoModels.dmg
+          name: Yuo-Tune-macOS-NoModels
+          path: Yuo-Tune-macOS-NoModels.dmg
           retention-days: 30
 
       - name: Upload Artifact (App ZIP)
         uses: actions/upload-artifact@v4
         with:
-          name: PitchNet-macOS-App
-          path: PitchNet-macOS-App.zip
+          name: Yuo-Tune-macOS-App
+          path: Yuo-Tune-macOS-App.zip
           retention-days: 30
 
       - name: Upload Artifact (App ZIP, No Models)
         uses: actions/upload-artifact@v4
         with:
-          name: PitchNet-macOS-App-NoModels
-          path: PitchNet-macOS-App-NoModels.zip
+          name: Yuo-Tune-macOS-App-NoModels
+          path: Yuo-Tune-macOS-App-NoModels.zip
           retention-days: 30
 
       - name: Upload Artifact (Unpacked)
         uses: actions/upload-artifact@v4
         with:
-          name: PitchNet-macOS-Unpacked
+          name: Yuo-Tune-macOS-Unpacked
           path: package/
           retention-days: 30
 
       - name: Upload Artifact (Unpacked, No Models)
         uses: actions/upload-artifact@v4
         with:
-          name: PitchNet-macOS-Unpacked-NoModels
+          name: Yuo-Tune-macOS-Unpacked-NoModels
           path: package-nomodels/
           retention-days: 30
 
       - name: Upload Artifact (VST3)
         uses: actions/upload-artifact@v4
         with:
-          name: PitchNet-macOS-VST3
-          path: PitchNet-macOS-VST3.zip
+          name: Yuo-Tune-macOS-VST3
+          path: Yuo-Tune-macOS-VST3.zip
           retention-days: 30
           if-no-files-found: ignore
 
       - name: Upload Artifact (AU)
         uses: actions/upload-artifact@v4
         with:
-          name: PitchNet-macOS-AU
-          path: PitchNet-macOS-AU.zip
+          name: Yuo-Tune-macOS-AU
+          path: Yuo-Tune-macOS-AU.zip
           retention-days: 30
           if-no-files-found: ignore
 
@@ -403,50 +424,50 @@ jobs:
 
       - name: Prepare Package
         run: |
-          mkdir -p package/PitchNet
+          mkdir -p package/Yuo-Tune
 
           # Copy standalone app
-          cp -R build/PitchNet_artefacts/${{ env.BUILD_TYPE }}/* package/PitchNet/
+          cp -R build/PitchNet_artefacts/${{ env.BUILD_TYPE }}/* package/Yuo-Tune/
 
           # Copy VST3 plugin
           if [ -d "build/PitchNetPlugin_artefacts/${{ env.BUILD_TYPE }}/VST3" ]; then
-            cp -R build/PitchNetPlugin_artefacts/${{ env.BUILD_TYPE }}/VST3 package/PitchNet/
+            cp -R build/PitchNetPlugin_artefacts/${{ env.BUILD_TYPE }}/VST3 package/Yuo-Tune/
           fi
 
           # Create launch script
-          cat > package/PitchNet/run.sh << 'EOF'
+          cat > package/Yuo-Tune/run.sh << 'EOF'
           #!/bin/bash
           SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
           export LD_LIBRARY_PATH="$SCRIPT_DIR:$LD_LIBRARY_PATH"
-          exec "$SCRIPT_DIR/PitchNet" "$@"
+          exec "${SCRIPT_DIR}/Yuo Tune" "$@"
           EOF
-          chmod +x package/PitchNet/run.sh
+          chmod +x package/Yuo-Tune/run.sh
 
           # Create no-models tarball (keep models dirs, remove files)
           rm -rf package-nomodels
           cp -R package package-nomodels
           find package-nomodels -type d -name models -exec sh -c 'rm -rf "$1"/*' _ {} \;
-          mkdir -p package-nomodels/PitchNet/models
+          mkdir -p package-nomodels/Yuo-Tune/models
 
           # Create tarball
           cd package
-          tar -czvf ../PitchNet-Linux.tar.gz PitchNet
+          tar -czvf ../Yuo-Tune-Linux.tar.gz PitchNet
 
           cd ../package-nomodels
-          tar -czvf ../PitchNet-Linux-NoModels.tar.gz PitchNet
+          tar -czvf ../Yuo-Tune-Linux-NoModels.tar.gz PitchNet
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PitchNet-Linux
-          path: PitchNet-Linux.tar.gz
+          name: Yuo-Tune-Linux
+          path: Yuo-Tune-Linux.tar.gz
           retention-days: 30
 
       - name: Upload Artifact (No Models)
         uses: actions/upload-artifact@v4
         with:
-          name: PitchNet-Linux-NoModels
-          path: PitchNet-Linux-NoModels.tar.gz
+          name: Yuo-Tune-Linux-NoModels
+          path: Yuo-Tune-Linux-NoModels.tar.gz
           retention-days: 30
 
   # ===========================================
@@ -501,50 +522,50 @@ jobs:
 
       - name: Prepare Package
         run: |
-          mkdir -p package/PitchNet
+          mkdir -p package/Yuo-Tune
 
           # Copy standalone app
-          cp -R build/PitchNet_artefacts/${{ env.BUILD_TYPE }}/* package/PitchNet/
+          cp -R build/PitchNet_artefacts/${{ env.BUILD_TYPE }}/* package/Yuo-Tune/
 
           # Copy VST3 plugin
           if [ -d "build/PitchNetPlugin_artefacts/${{ env.BUILD_TYPE }}/VST3" ]; then
-            cp -R build/PitchNetPlugin_artefacts/${{ env.BUILD_TYPE }}/VST3 package/PitchNet/
+            cp -R build/PitchNetPlugin_artefacts/${{ env.BUILD_TYPE }}/VST3 package/Yuo-Tune/
           fi
 
           # Create launch script
-          cat > package/PitchNet/run.sh << 'EOF'
+          cat > package/Yuo-Tune/run.sh << 'EOF'
           #!/bin/bash
           SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
           export LD_LIBRARY_PATH="$SCRIPT_DIR:$LD_LIBRARY_PATH"
-          exec "$SCRIPT_DIR/PitchNet" "$@"
+          exec "${SCRIPT_DIR}/Yuo Tune" "$@"
           EOF
-          chmod +x package/PitchNet/run.sh
+          chmod +x package/Yuo-Tune/run.sh
 
           # Create no-models tarball (keep models dirs, remove files)
           rm -rf package-nomodels
           cp -R package package-nomodels
           find package-nomodels -type d -name models -exec sh -c 'rm -rf "$1"/*' _ {} \;
-          mkdir -p package-nomodels/PitchNet/models
+          mkdir -p package-nomodels/Yuo-Tune/models
 
           # Create tarball
           cd package
-          tar -czvf ../PitchNet-Linux-GPU.tar.gz PitchNet
+          tar -czvf ../Yuo-Tune-Linux-GPU.tar.gz PitchNet
 
           cd ../package-nomodels
-          tar -czvf ../PitchNet-Linux-GPU-NoModels.tar.gz PitchNet
+          tar -czvf ../Yuo-Tune-Linux-GPU-NoModels.tar.gz PitchNet
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PitchNet-Linux-GPU
-          path: PitchNet-Linux-GPU.tar.gz
+          name: Yuo-Tune-Linux-GPU
+          path: Yuo-Tune-Linux-GPU.tar.gz
           retention-days: 30
 
       - name: Upload Artifact (No Models)
         uses: actions/upload-artifact@v4
         with:
-          name: PitchNet-Linux-GPU-NoModels
-          path: PitchNet-Linux-GPU-NoModels.tar.gz
+          name: Yuo-Tune-Linux-GPU-NoModels
+          path: Yuo-Tune-Linux-GPU-NoModels.tar.gz
           retention-days: 30
 
   # ===========================================
@@ -572,64 +593,69 @@ jobs:
           cd artifacts
 
           # Windows packages
-          if [ -d "PitchNet-Windows-CPU" ]; then
-            cd PitchNet-Windows-CPU && zip -r ../PitchNet-Windows-CPU.zip . && cd ..
+          if [ -d "Yuo-Tune-Windows-CPU" ]; then
+            cd Yuo-Tune-Windows-CPU && zip -r ../Yuo-Tune-Windows-CPU.zip . && cd ..
           fi
 
-          if [ -d "PitchNet-Windows-CPU-NoModels" ]; then
-            cd PitchNet-Windows-CPU-NoModels && zip -r ../PitchNet-Windows-CPU-NoModels.zip . && cd ..
+          if [ -d "Yuo-Tune-Windows-CPU-NoModels" ]; then
+            cd Yuo-Tune-Windows-CPU-NoModels && zip -r ../Yuo-Tune-Windows-CPU-NoModels.zip . && cd ..
           fi
 
-          if [ -d "PitchNet-Windows-DirectML" ]; then
-            cd PitchNet-Windows-DirectML && zip -r ../PitchNet-Windows-DirectML.zip . && cd ..
+          if [ -d "Yuo-Tune-Windows-DirectML" ]; then
+            cd Yuo-Tune-Windows-DirectML && zip -r ../Yuo-Tune-Windows-DirectML.zip . && cd ..
           fi
 
-          if [ -d "PitchNet-Windows-DirectML-NoModels" ]; then
-            cd PitchNet-Windows-DirectML-NoModels && zip -r ../PitchNet-Windows-DirectML-NoModels.zip . && cd ..
+          if [ -d "Yuo-Tune-Windows-DirectML-NoModels" ]; then
+            cd Yuo-Tune-Windows-DirectML-NoModels && zip -r ../Yuo-Tune-Windows-DirectML-NoModels.zip . && cd ..
           fi
 
           # macOS DMG is already ready
-          if [ -d "PitchNet-macOS" ]; then
-            mv PitchNet-macOS/*.dmg ./PitchNet-macOS.dmg || true
+          if [ -d "Yuo-Tune-macOS" ]; then
+            mv Yuo-Tune-macOS/*.dmg ./Yuo-Tune-macOS.dmg || true
           fi
 
-          if [ -d "PitchNet-macOS-NoModels" ]; then
-            mv PitchNet-macOS-NoModels/*.dmg ./PitchNet-macOS-NoModels.dmg || true
+          if [ -d "Yuo-Tune-macOS-NoModels" ]; then
+            mv Yuo-Tune-macOS-NoModels/*.dmg ./Yuo-Tune-macOS-NoModels.dmg || true
           fi
 
           # macOS App ZIP is already ready
-          if [ -d "PitchNet-macOS-App" ]; then
-            mv PitchNet-macOS-App/*.zip ./PitchNet-macOS-App.zip || true
+          if [ -d "Yuo-Tune-macOS-App" ]; then
+            mv Yuo-Tune-macOS-App/*.zip ./Yuo-Tune-macOS-App.zip || true
           fi
 
-          if [ -d "PitchNet-macOS-App-NoModels" ]; then
-            mv PitchNet-macOS-App-NoModels/*.zip ./PitchNet-macOS-App-NoModels.zip || true
+          if [ -d "Yuo-Tune-macOS-App-NoModels" ]; then
+            mv Yuo-Tune-macOS-App-NoModels/*.zip ./Yuo-Tune-macOS-App-NoModels.zip || true
           fi
 
           # macOS plugin ZIPs
-          if [ -d "PitchNet-macOS-VST3" ]; then
-            mv PitchNet-macOS-VST3/*.zip ./PitchNet-macOS-VST3.zip || true
+          if [ -d "Yuo-Tune-macOS-VST3" ]; then
+            mv Yuo-Tune-macOS-VST3/*.zip ./Yuo-Tune-macOS-VST3.zip || true
           fi
 
-          if [ -d "PitchNet-macOS-AU" ]; then
-            mv PitchNet-macOS-AU/*.zip ./PitchNet-macOS-AU.zip || true
+          if [ -d "Yuo-Tune-macOS-AU" ]; then
+            mv Yuo-Tune-macOS-AU/*.zip ./Yuo-Tune-macOS-AU.zip || true
+          fi
+
+          # Publish the Windows installer alongside the other release assets
+          if [ -f "Yuo-Tune-Windows-Installer/Yuo-Tune-Setup.exe" ]; then
+            cp "Yuo-Tune-Windows-Installer/Yuo-Tune-Setup.exe" "./Yuo-Tune-Setup.exe"
           fi
 
           # Linux tarballs are already ready
-          if [ -d "PitchNet-Linux" ]; then
-            mv PitchNet-Linux/*.tar.gz ./PitchNet-Linux.tar.gz || true
+          if [ -d "Yuo-Tune-Linux" ]; then
+            mv Yuo-Tune-Linux/*.tar.gz ./Yuo-Tune-Linux.tar.gz || true
           fi
 
-          if [ -d "PitchNet-Linux-NoModels" ]; then
-            mv PitchNet-Linux-NoModels/*.tar.gz ./PitchNet-Linux-NoModels.tar.gz || true
+          if [ -d "Yuo-Tune-Linux-NoModels" ]; then
+            mv Yuo-Tune-Linux-NoModels/*.tar.gz ./Yuo-Tune-Linux-NoModels.tar.gz || true
           fi
 
-          if [ -d "PitchNet-Linux-GPU" ]; then
-            mv PitchNet-Linux-GPU/*.tar.gz ./PitchNet-Linux-GPU.tar.gz || true
+          if [ -d "Yuo-Tune-Linux-GPU" ]; then
+            mv Yuo-Tune-Linux-GPU/*.tar.gz ./Yuo-Tune-Linux-GPU.tar.gz || true
           fi
 
-          if [ -d "PitchNet-Linux-GPU-NoModels" ]; then
-            mv PitchNet-Linux-GPU-NoModels/*.tar.gz ./PitchNet-Linux-GPU-NoModels.tar.gz || true
+          if [ -d "Yuo-Tune-Linux-GPU-NoModels" ]; then
+            mv Yuo-Tune-Linux-GPU-NoModels/*.tar.gz ./Yuo-Tune-Linux-GPU-NoModels.tar.gz || true
           fi
 
           ls -la
@@ -638,20 +664,21 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/PitchNet-Windows-CPU.zip
-            artifacts/PitchNet-Windows-CPU-NoModels.zip
-            artifacts/PitchNet-Windows-DirectML.zip
-            artifacts/PitchNet-Windows-DirectML-NoModels.zip
-            artifacts/PitchNet-macOS.dmg
-            artifacts/PitchNet-macOS-NoModels.dmg
-            artifacts/PitchNet-macOS-App.zip
-            artifacts/PitchNet-macOS-App-NoModels.zip
-            artifacts/PitchNet-macOS-VST3.zip
-            artifacts/PitchNet-macOS-AU.zip
-            artifacts/PitchNet-Linux.tar.gz
-            artifacts/PitchNet-Linux-NoModels.tar.gz
-            artifacts/PitchNet-Linux-GPU.tar.gz
-            artifacts/PitchNet-Linux-GPU-NoModels.tar.gz
+            artifacts/Yuo-Tune-Setup.exe
+            artifacts/Yuo-Tune-Windows-CPU.zip
+            artifacts/Yuo-Tune-Windows-CPU-NoModels.zip
+            artifacts/Yuo-Tune-Windows-DirectML.zip
+            artifacts/Yuo-Tune-Windows-DirectML-NoModels.zip
+            artifacts/Yuo-Tune-macOS.dmg
+            artifacts/Yuo-Tune-macOS-NoModels.dmg
+            artifacts/Yuo-Tune-macOS-App.zip
+            artifacts/Yuo-Tune-macOS-App-NoModels.zip
+            artifacts/Yuo-Tune-macOS-VST3.zip
+            artifacts/Yuo-Tune-macOS-AU.zip
+            artifacts/Yuo-Tune-Linux.tar.gz
+            artifacts/Yuo-Tune-Linux-NoModels.tar.gz
+            artifacts/Yuo-Tune-Linux-GPU.tar.gz
+            artifacts/Yuo-Tune-Linux-GPU-NoModels.tar.gz
           draft: true
           generate_release_notes: true
           fail_on_unmatched_files: false

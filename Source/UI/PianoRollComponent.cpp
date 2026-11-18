@@ -3,6 +3,8 @@
 #include "../Utils/PitchMacroScope.h"
 #include "../Utils/AppLogger.h"
 #include "../Undo/AmplitudeAction.h"
+#include "../Undo/InspectorEditAction.h"
+#include "../Utils/NotePitch.h"
 #include "../Undo/GainEditAction.h"
 #include "../Audio/BreathNotes.h"
 #include "../Utils/BasePitchCurve.h"
@@ -2235,17 +2237,13 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent &e)
     return;
   }
 
-  // Middle-mouse scrub: click-and-drag anywhere in the timeline/canvas
-  // (ruler or note area) to move the playback cursor, mirroring Reaper's
-  // own middle-button scrub. Takes priority over every other gesture so
-  // held modifier keys never redirect it into zoom/pan.
+  // Middle-button drag pans the canvas without moving the playback cursor.
+  // This takes priority over tool gestures, including when modifier keys are held.
   if (e.mods.isMiddleButtonDown() && e.x >= pianoKeysWidth)
   {
-    middleButtonScrubActive = true;
-    double time = std::max(getTimelineStart(), xToTime(adjustedX));
-    setCursorTime(time);
-    if (onSeek)
-      onSeek(time);
+    modifierPanDragActive = true;
+    modifierPanLastPosition = e.position;
+    setMouseCursor(juce::MouseCursor::DraggingHandCursor);
     return;
   }
 
@@ -2398,15 +2396,6 @@ void PianoRollComponent::mouseDrag(const juce::MouseEvent &e)
     return;
   if (swallowGestureUntilMouseUp)
     return;
-  if (middleButtonScrubActive)
-  {
-    float adjustedX = e.x - pianoKeysWidth + static_cast<float>(scrollX);
-    double time = std::max(getTimelineStart(), xToTime(adjustedX));
-    setCursorTime(time);
-    if (onSeek)
-      onSeek(time);
-    return;
-  }
 
   if (modifierZoomDragActive)
   {
@@ -2459,11 +2448,6 @@ void PianoRollComponent::mouseUp(const juce::MouseEvent &e)
   if (swallowGestureUntilMouseUp)
   {
     swallowGestureUntilMouseUp = false;
-    return;
-  }
-  if (middleButtonScrubActive)
-  {
-    middleButtonScrubActive = false;
     return;
   }
 
@@ -3038,6 +3022,227 @@ void PianoRollComponent::scrollBarMoved(juce::ScrollBar *scrollBar,
   repaint();
 }
 
+std::vector<Note *> PianoRollComponent::getInspectorTargets() const
+{
+  std::vector<Note *> selected, all;
+  if (project == nullptr)
+    return all;
+  for (auto &note : project->getNotes())
+  {
+    if (note.isRest())
+      continue;
+    all.push_back(&note);
+    if (note.isSelected())
+      selected.push_back(&note);
+  }
+  return selected.empty() ? all : selected;
+}
+
+float PianoRollComponent::correctionTargetFor(float sourceMidi) const
+{
+  if (project != nullptr)
+    return ScaleUtils::correctionTargetFor(*project, sourceMidi, pitchReferenceHz);
+  return ScaleUtils::snapMidiToSemitone(sourceMidi, pitchReferenceHz);
+}
+
+std::optional<float>
+PianoRollComponent::getInspectorValue(InspectorParam param) const
+{
+  const auto targets = getInspectorTargets();
+  if (targets.empty())
+    return std::nullopt;
+  const Note &note = *targets.front();
+  switch (param)
+  {
+    case InspectorParam::CorrectPitch:
+    {
+      // Share of the original deviation from the target pitch that has been
+      // removed: 0% = as sung, 100% = exactly on the semitone/scale tone. A
+      // pitch outside 0-100% shows 0%, which is where a gesture starts from
+      // (beginInspectorEdit re-anchors it), so the slider never jumps.
+      if (project == nullptr)
+        return 0.0f;
+      const auto share = ScaleUtils::correctionShare(
+          *project, note.getLastNonMacroMidiNote(), note.getMidiNote(), pitchReferenceHz);
+      return share ? *share * 100.0f : 0.0f;
+    }
+    case InspectorParam::FlattenCurve:
+      return juce::jlimit(0.0f, 100.0f, (1.0f - note.getVibrato()) * 100.0f);
+    case InspectorParam::PitchDrift:
+      return juce::jlimit(0.0f, 100.0f, (1.0f - note.getPitchDrift()) * 100.0f);
+    case InspectorParam::Formant:
+      return note.getFormantShift();
+    case InspectorParam::Volume:
+      return note.getVolumeDb();
+  }
+  return std::nullopt;
+}
+
+void PianoRollComponent::beginInspectorEdit(InspectorParam param)
+{
+  if (inspectorEditActive)
+    endInspectorEdit();
+  inspectorEditNotes = getInspectorTargets();
+  if (inspectorEditNotes.empty())
+    return;
+  inspectorEditActive = true;
+  inspectorEditParam = param;
+  inspectorEditOldParams.clear();
+  inspectorEditSourceMidi.clear();
+  for (size_t i = 0; i < inspectorEditNotes.size(); ++i)
+  {
+    auto *note = inspectorEditNotes[i];
+    inspectorEditOldParams.push_back(TransformParams::fromNote(*note));
+    // A pitch that is not a 0-100% correction of its reference (older
+    // projects, pitch drawing) starts over from where it is, so the slider
+    // never jumps. The undo step restores the old reference.
+    if (param == InspectorParam::CorrectPitch && project != nullptr &&
+        !ScaleUtils::correctionShare(*project, note->getLastNonMacroMidiNote(),
+                                     note->getMidiNote(), pitchReferenceHz))
+      NotePitch::setCorrectionSource(*note, note->getMidiNote());
+    inspectorEditSourceMidi.push_back(note->getLastNonMacroMidiNote());
+  }
+}
+
+void PianoRollComponent::setInspectorEditValue(float value)
+{
+  if (!inspectorEditActive || project == nullptr)
+    return;
+
+  int minFrame = std::numeric_limits<int>::max();
+  int maxFrame = std::numeric_limits<int>::min();
+  for (size_t i = 0; i < inspectorEditNotes.size(); ++i)
+  {
+    auto *note = inspectorEditNotes[i];
+    switch (inspectorEditParam)
+    {
+      case InspectorParam::CorrectPitch:
+      {
+        const float source = inspectorEditSourceMidi[i];
+        const float target = correctionTargetFor(source);
+        NotePitch::applyCorrection(
+            *note, target + (source - target) * (1.0f - value / 100.0f));
+        break;
+      }
+      case InspectorParam::FlattenCurve:
+        note->setVibrato(1.0f - value / 100.0f);
+        break;
+      case InspectorParam::PitchDrift:
+        note->setPitchDrift(1.0f - value / 100.0f);
+        break;
+      case InspectorParam::Formant:
+        note->setFormantShift(value);
+        break;
+      case InspectorParam::Volume:
+        // Gain is applied to the audio once, on release (AmplitudeAction).
+        note->setVolumeDb(value);
+        break;
+    }
+    note->markDirty();
+    minFrame = std::min(minFrame, note->getStartFrame());
+    maxFrame = std::max(maxFrame, note->getEndFrame());
+  }
+
+  if (inspectorEditParam != InspectorParam::Volume)
+  {
+    PitchCurveProcessor::rebuildDeltaForNotes(*project, inspectorEditNotes);
+    project->markNoteEditDirtyRange(minFrame, maxFrame);
+    invalidateBasePitchCache();
+    if (onPitchEdited)
+      onPitchEdited();
+  }
+  repaint();
+}
+
+void PianoRollComponent::endInspectorEdit()
+{
+  if (!inspectorEditActive)
+    return;
+  inspectorEditActive = false;
+  auto notes = std::move(inspectorEditNotes);
+  auto oldParams = std::move(inspectorEditOldParams);
+  inspectorEditSourceMidi.clear();
+  inspectorEditNotes.clear();
+  // References as they were before the gesture (beginInspectorEdit may have
+  // re-anchored them).
+  std::vector<float> oldSource;
+  for (size_t i = 0; i < oldParams.size(); ++i)
+    oldSource.push_back(oldParams[i].correctionSource);
+  if (project == nullptr || notes.empty())
+    return;
+
+  if (inspectorEditParam == InspectorParam::Volume)
+  {
+    std::vector<float> before, after;
+    for (size_t i = 0; i < notes.size(); ++i)
+    {
+      before.push_back(oldParams[i].volumeDb);
+      after.push_back(notes[i]->getVolumeDb());
+    }
+    if (before == after)
+      return;
+    auto action = std::make_unique<AmplitudeAction>(
+        *project, notes, before, after, pitchToolController->onAmplitudeEdited,
+        "Change Volume");
+    action->redo();
+    if (undoManager)
+      undoManager->addAction(std::move(action));
+    return;
+  }
+
+  std::vector<TransformParams> newParams;
+  std::vector<float> newSource;
+  bool changed = false;
+  for (size_t i = 0; i < notes.size(); ++i)
+  {
+    newParams.push_back(TransformParams::fromNote(*notes[i]));
+    newSource.push_back(notes[i]->getLastNonMacroMidiNote());
+    // A re-anchored reference alone is not an edit.
+    auto compared = newParams.back();
+    compared.correctionSource = oldParams[i].correctionSource;
+    changed |= !(compared == oldParams[i]);
+  }
+  if (!changed)
+  {
+    for (size_t i = 0; i < notes.size(); ++i)
+      NotePitch::setCorrectionSource(*notes[i], oldParams[i].correctionSource);
+    return;
+  }
+
+  int minFrame = std::numeric_limits<int>::max();
+  int maxFrame = std::numeric_limits<int>::min();
+  for (size_t i = 0; i < notes.size(); ++i)
+  {
+    auto *note = notes[i];
+    note->markSynthDirty();
+    minFrame = std::min(minFrame, note->getStartFrame());
+    maxFrame = std::max(maxFrame, note->getEndFrame());
+  }
+  PitchCurveProcessor::rebuildBaseFromNotes(*project);
+  project->markNoteEditDirtyRange(minFrame, maxFrame);
+  invalidateBasePitchCache();
+
+  static const char *names[] = {"Correct Pitch", "Flatten Curve", "Pitch Drift",
+                                "Shift Formant", "Change Volume"};
+  if (undoManager)
+    undoManager->addAction(std::make_unique<InspectorEditAction>(
+        project, notes, oldParams, newParams, oldSource, newSource,
+        names[static_cast<int>(inspectorEditParam)]));
+
+  if (onPitchEdited)
+    onPitchEdited();
+  if (onPitchEditFinished)
+    onPitchEditFinished();
+  repaint();
+}
+
+void PianoRollComponent::setShowAllSmartControls(bool showAll)
+{
+  showAllSmartControls = showAll;
+  updatePitchToolHandlesFromSelection();
+  repaint();
+}
+
 void PianoRollComponent::setProject(Project *proj)
 {
   if (pitchDrawingHandler_)
@@ -3191,6 +3396,11 @@ void PianoRollComponent::setScaleModePreview(std::optional<ScaleMode> mode)
 
   previewScaleMode = mode;
   repaint();
+}
+
+void PianoRollComponent::setAbsoluteDragSnap(bool absolute)
+{
+  pitchEditor->setAbsoluteDragSnap(absolute);
 }
 
 void PianoRollComponent::setSnapToSemitoneDrag(bool enabled)
@@ -3403,6 +3613,166 @@ bool PianoRollComponent::nudgeSelectedNotesBySemitones(int semitoneDelta)
 
   rebuildAndNotify(notesToMove);
   return true;
+}
+
+bool PianoRollComponent::shiftNotesBySemitones(
+    const std::vector<Note *> &targets,
+    const std::function<std::optional<float>(const Note &)> &shiftForNote)
+{
+  if (project == nullptr || targets.empty())
+    return false;
+
+  const auto &selectedNotes = targets;
+
+  constexpr float minMidi = static_cast<float>(MIN_MIDI_NOTE);
+  constexpr float maxMidi = static_cast<float>(MAX_MIDI_NOTE);
+
+  std::vector<Note *> notesToMove;
+  std::vector<float> oldMidis;
+  std::vector<float> newMidis;
+  // Harmony and arrow-key moves keep the Correct Pitch reference (see
+  // NotePitch).
+  std::vector<float> oldSources;
+  std::vector<float> newSources;
+  notesToMove.reserve(selectedNotes.size());
+  oldMidis.reserve(selectedNotes.size());
+  newMidis.reserve(selectedNotes.size());
+
+  int dirtyStartFrame = std::numeric_limits<int>::max();
+  int dirtyEndFrame = std::numeric_limits<int>::min();
+
+  for (auto *note : selectedNotes)
+  {
+    if (!note || note->isRest())
+      continue;
+
+    const auto semitoneDelta = shiftForNote(*note);
+    if (!semitoneDelta || std::abs(*semitoneDelta) < 1.0e-6f)
+      continue;
+
+    const float oldMidi = note->getMidiNote();
+    const float offset = note->getPitchOffset();
+    const float oldAdjustedMidi = oldMidi + offset;
+    const float movedAdjustedMidi =
+        juce::jlimit(minMidi, maxMidi,
+                     oldAdjustedMidi + *semitoneDelta);
+    const float movedMidi = movedAdjustedMidi - offset;
+
+    if (std::abs(movedMidi - oldMidi) <= 1.0e-6f)
+      continue;
+
+    notesToMove.push_back(note);
+    oldMidis.push_back(oldMidi);
+    newMidis.push_back(movedMidi);
+    oldSources.push_back(note->getLastNonMacroMidiNote());
+    newSources.push_back(NotePitch::sourceAfterEdit(
+        *project, *note, note->getLastNonMacroMidiNote(), oldMidi, movedMidi));
+    dirtyStartFrame = std::min(dirtyStartFrame, note->getStartFrame());
+    dirtyEndFrame = std::max(dirtyEndFrame, note->getEndFrame());
+  }
+
+  if (notesToMove.empty())
+    return false;
+
+  auto rebuildAndNotify =
+      [this, dirtyStartFrame, dirtyEndFrame](const std::vector<Note *> &)
+  {
+    if (project == nullptr)
+      return;
+
+    PitchCurveProcessor::rebuildBaseFromNotes(*project);
+    invalidateBasePitchCache();
+
+    project->markNoteEditDirtyRange(dirtyStartFrame, dirtyEndFrame);
+
+    if (onPitchEdited)
+      onPitchEdited();
+    if (onPitchEditFinished)
+      onPitchEditFinished();
+
+    repaint();
+  };
+
+  if (undoManager)
+  {
+    auto *projectPtr = project;
+    auto action = std::make_unique<MultiNoteMidiNudgeAction>(
+        notesToMove, oldMidis, newMidis,
+        [projectPtr, dirtyStartFrame,
+         dirtyEndFrame](const std::vector<Note *> &notes)
+        {
+          if (!projectPtr)
+            return;
+          PitchCurveProcessor::rebuildBaseFromNotes(*projectPtr);
+          for (auto *note : notes)
+            if (note)
+              note->markSynthDirty();
+          projectPtr->markNoteEditDirtyRange(dirtyStartFrame, dirtyEndFrame);
+        },
+        oldSources, newSources);
+    undoManager->addAction(std::move(action));
+  }
+
+  for (size_t i = 0; i < notesToMove.size(); ++i)
+  {
+    NotePitch::restore(*notesToMove[i], newMidis[i], newSources[i]);
+    notesToMove[i]->markDirty();
+    notesToMove[i]->markSynthDirty();
+  }
+
+  rebuildAndNotify(notesToMove);
+  return true;
+}
+
+HarmonyUtils::Result PianoRollComponent::applyHarmonyInterval(
+    HarmonyUtils::Interval interval, bool up)
+{
+  if (project == nullptr)
+    return HarmonyUtils::Result::NoNotes;
+
+  // Harmony follows the project key even when drag-snap is set to chromatic.
+  const ScaleMode keyMode = project->getPreferredScaleMode();
+  const int keyRoot = project->getScaleRootNote();
+  if (interval != HarmonyUtils::Interval::Octave &&
+      !HarmonyUtils::supportsDiatonicIntervals(keyMode, keyRoot))
+    return HarmonyUtils::Result::ScaleUnsupported;
+
+  // One click should turn a duplicated lead track into a harmony line, so an
+  // empty selection means "every note".
+  auto targets = project->getSelectedNotes();
+  if (targets.empty())
+    for (auto &note : project->getNotes())
+      targets.push_back(&note);
+
+  const int referenceHz = pitchReferenceHz;
+  int outOfRangeCount = 0;
+  const bool moved = shiftNotesBySemitones(
+      targets,
+      [interval, up, keyMode, keyRoot, referenceHz,
+       &outOfRangeCount](const Note &note) -> std::optional<float>
+      {
+        const float adjustedMidi = note.getAdjustedMidiNote();
+        const auto shift = HarmonyUtils::intervalShiftSemitones(
+            adjustedMidi, interval, up, keyMode, keyRoot, referenceHz);
+        if (!shift)
+          return std::nullopt;
+
+        // Clamping at the editor's range would land on an arbitrary,
+        // possibly out-of-key pitch, so such notes stay where they are.
+        const float target = adjustedMidi + static_cast<float>(*shift);
+        if (target < static_cast<float>(MIN_MIDI_NOTE) ||
+            target > static_cast<float>(MAX_MIDI_NOTE))
+        {
+          ++outOfRangeCount;
+          return std::nullopt;
+        }
+        return static_cast<float>(*shift);
+      });
+
+  if (outOfRangeCount > 0)
+    return moved ? HarmonyUtils::Result::PartlyOutOfRange
+                 : HarmonyUtils::Result::OutOfRange;
+  return moved ? HarmonyUtils::Result::Applied : HarmonyUtils::Result::NoNotes;
 }
 
 bool PianoRollComponent::keyPressed(const juce::KeyPress &key)
@@ -4595,7 +4965,18 @@ void PianoRollComponent::drawSelectionRect(juce::Graphics &g)
   g.setColour(juce::Colours::white.withAlpha(0.05f));
   g.fillRect(rect);
 
-  // Draw border
-  g.setColour(juce::Colours::white.withAlpha(0.25f));
+  // Draw a subtle hatched fill so the selection area remains visible over
+  // both the waveform and the piano-roll grid.
+  {
+    juce::Graphics::ScopedSaveState saveState(g);
+    g.reduceClipRegion(rect.toNearestInt());
+    g.setColour(juce::Colours::white.withAlpha(0.22f));
+    const float hatchSpacing = 8.0f;
+    for (float x = rect.getX() - rect.getHeight(); x < rect.getRight(); x += hatchSpacing)
+      g.drawLine(x, rect.getBottom(), x + rect.getHeight(), rect.getY(), 1.0f);
+  }
+
+  // Draw border above the hatching.
+  g.setColour(juce::Colours::white.withAlpha(0.45f));
   g.drawRect(rect, 1.0f);
 }

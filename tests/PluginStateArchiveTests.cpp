@@ -192,7 +192,16 @@ void streamWriterMatchesMemoryBlockWriter() {
 }
 
 void hostBackedArchiveStaysSourceless() {
-  const Project source = makeProject(0.0);
+  Project source = makeProject(0.0);
+  // These are the edit/scale settings the ARA document archive must preserve
+  // even though the host owns the original audio source.
+  source.setUseProjectKey(false);
+  source.setScaleRootNote(4);
+  source.setPreferredScaleMode(ScaleMode::Minor);
+  source.setDragSnapMode(DragSnapMode::Scale);
+  source.getNotes()[0].setPitchOffset(0.35f);
+  source.getNotes()[0].setSibilantBalance(0.4f);
+  source.getNotes()[0].setFormantShift(-1.5f);
 
   juce::MemoryBlock archive;
   CHECK(ProjectSerializer::toBinaryArchive(
@@ -210,6 +219,13 @@ void hostBackedArchiveStaysSourceless() {
   CHECK(b.melSpectrogram.empty());
   CHECK(b.deltaPitch.size() == (size_t)kFrames);
   CHECK(restored.getNotes().size() == 1);
+  CHECK(!restored.getUseProjectKey());
+  CHECK(restored.getScaleRootNote() == 4);
+  CHECK(restored.getPreferredScaleMode() == ScaleMode::Minor);
+  CHECK(restored.getDragSnapMode() == DragSnapMode::Scale);
+  expectNear(restored.getNotes()[0].getPitchOffset(), 0.35f, "ARA note pitch offset");
+  expectNear(restored.getNotes()[0].getSibilantBalance(), 0.4f, "ARA note sibilant balance");
+  expectNear(restored.getNotes()[0].getFormantShift(), -1.5f, "ARA note formant shift");
 }
 
 } // namespace

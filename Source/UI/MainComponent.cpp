@@ -811,6 +811,52 @@ MainComponent::MainComponent(bool enableAudioDevice)
   workspace.getMainCard().setBackgroundColour(juce::Colours::transparentBlack);
   workspace.getMainCard().setBorderColour(juce::Colours::transparentBlack);
 
+  // VariAudio-style inspector: pitch correction and smart controls.
+  variAudioInspector.getCurrentProject = [this] { return getProject(); };
+  using InspectorParam = PianoRollComponent::InspectorParam;
+  variAudioInspector.getParamValue = [this](VariAudioInspector::Param param)
+  { return pianoRoll.getInspectorValue(static_cast<InspectorParam>(param)); };
+  variAudioInspector.getTargetCount = [this]
+  {
+    const auto targets = pianoRoll.getInspectorTargets();
+    const bool selection = !targets.empty() && targets.front()->isSelected();
+    return std::pair<int, bool>{static_cast<int>(targets.size()), selection};
+  };
+  variAudioInspector.onParamEditBegin = [this](VariAudioInspector::Param param)
+  { pianoRoll.beginInspectorEdit(static_cast<InspectorParam>(param)); };
+  variAudioInspector.onParamEditValue = [this](float value)
+  { pianoRoll.setInspectorEditValue(value); };
+  variAudioInspector.onParamEditEnd = [this] { pianoRoll.endInspectorEdit(); };
+  variAudioInspector.onSnapModeChanged = [this](VariAudioInspector::SnapMode mode)
+  {
+    pianoRoll.setSnapToSemitoneDrag(mode != VariAudioInspector::SnapMode::Off);
+    if (mode != VariAudioInspector::SnapMode::Off)
+      pianoRoll.setAbsoluteDragSnap(mode == VariAudioInspector::SnapMode::Absolute);
+    parameterPanel.updateGlobalSliders();
+    variAudioInspector.refresh();
+  };
+  variAudioInspector.onShowAllSmartControlsChanged = [this](bool showAll)
+  { pianoRoll.setShowAllSmartControls(showAll); };
+  variAudioInspector.onDragSnapModeChanged = [this](DragSnapMode mode)
+  {
+    pianoRoll.setDragSnapMode(mode);
+    parameterPanel.updateGlobalSliders();
+    notifyProjectDataChanged();
+  };
+  auto &harmonyPanel = variAudioInspector.getHarmonyPanel();
+  harmonyPanel.onHarmonyRequested =
+      [this](HarmonyUtils::Interval interval, bool up)
+  { return pianoRoll.applyHarmonyInterval(interval, up); };
+  variAudioInspector.isProjectKeyScope = [this] { return isTrackViewMode(); };
+  variAudioInspector.onEditorScaleChanged = [this]
+  {
+    pianoRoll.refreshScaleFromProject();
+    variAudioInspector.getHarmonyPanel().refreshProject();
+    parameterPanel.updateGlobalSliders();
+    notifyProjectDataChanged();
+  };
+  workspace.setInspectorContent(&variAudioInspector, VariAudioInspector::preferredWidth);
+
   // Add parameter panel to workspace.
   workspace.addPanel("parameters", TR("panel.parameters"), &parameterPanel,
                      false);
@@ -4061,7 +4107,11 @@ void MainComponent::getCommandInfo(juce::CommandID commandID,
 
   case CommandIDs::saveProject:
     result.setInfo(TR("command.save_project"), TR("command.save_project.desp"), TR("menu.file"), 0);
-    result.addDefaultKeypress('s', primaryModifier);
+    // In plugin mode, leave the host's project-save shortcut unclaimed.
+    // The processor's getStateInformation/setStateInformation and ARA
+    // document persistence remain responsible for saving/restoring plugin data.
+    if (!isPluginMode())
+      result.addDefaultKeypress('s', primaryModifier);
     result.setActive(project != nullptr);
     break;
 

@@ -19,6 +19,7 @@ set(PITCHNET_TEST_SOURCES
     BreathSibilanceTests.cpp
     FormantShiftTests.cpp
     HostSyncTempoTests.cpp
+    HarmonyIntervalTests.cpp
     MidiReferenceTests.cpp
     NoteGainCurveTests.cpp
     NonAraLifecycleTests.cpp
@@ -86,3 +87,10 @@ add_executable(PitchMacroRenderTests PitchMacroRenderTests.cpp)
 target_link_libraries(PitchMacroRenderTests PRIVATE pitchnet_ui)
 target_compile_features(PitchMacroRenderTests PRIVATE cxx_std_17)
 add_test(NAME PitchMacroRenderTests COMMAND PitchMacroRenderTests)
+
+
+# Scale-aware harmony controls are UI operations, so link the UI target.
+add_executable(HarmonyApplyTests HarmonyApplyTests.cpp)
+target_link_libraries(HarmonyApplyTests PRIVATE pitchnet_ui)
+target_compile_features(HarmonyApplyTests PRIVATE cxx_std_17)
+add_test(NAME HarmonyApplyTests COMMAND HarmonyApplyTests)

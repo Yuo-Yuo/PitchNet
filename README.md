@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>PitchNet</h1>
+  <h1>Yuo Tune</h1>
   <p>A lightweight pitch editor built with JUCE, featuring neural pitch detection and vocoder resynthesis for real-time preview.</p>
 </div>
 
@@ -7,17 +7,19 @@
 
 ## Origin, attribution, and license
 
-PitchNet is a modified derivative of [HachiTune](https://github.com/KCKT0112/HachiTune), an open-source project developed by the HachiTune contributors. It includes substantial code derived from HachiTune, along with subsequent changes by Session Loops and other contributors. This repository does not claim sole authorship of the derived work.
+Yuo Tune is based on PitchNet, a modified derivative of [HachiTune](https://github.com/KCKT0112/HachiTune), an open-source project developed by the HachiTune contributors. It includes substantial code derived from HachiTune, along with subsequent changes by Session Loops and other contributors. This repository does not claim sole authorship of the derived work.
 
-PitchNet is distributed under the [GNU Affero General Public License, version 3](LICENSE) (AGPLv3). The complete license text is included in this repository. When conveying copies or modified versions, preserve all applicable copyright, license, and attribution notices, and make the corresponding source available as required by the AGPLv3.
+Yuo Tune is distributed under the [GNU Affero General Public License, version 3](LICENSE) (AGPLv3). The complete license text is included in this repository. When conveying copies or modified versions, preserve all applicable copyright, license, and attribution notices, and make the corresponding source available as required by the AGPLv3.
 
 ## Overview
 
-PitchNet is a standalone app and audio plugin for editing vocal pitch in a piano roll. It analyzes audio using neural pitch detectors (RMVPE / FCPE), segments notes with the GAME model, and resynthesizes edits in real time through a neural vocoder (PC-NSF-HiFiGAN). Edits are previewed instantly with minimal latency and exported as audio or MIDI. The plugin supports both ARA hosts and a non-ARA capture workflow.
+Yuo Tune is a standalone app and audio plugin for editing vocal pitch in a piano roll. It analyzes audio using neural pitch detectors (RMVPE / FCPE), segments notes with the GAME model, and resynthesizes edits in real time through a neural vocoder (PC-NSF-HiFiGAN). Edits are previewed instantly with minimal latency and exported as audio or MIDI. The plugin supports both ARA hosts and a non-ARA capture workflow.
 
 ## Features
 
 - Piano roll editing with select, split, pitch drawing, and timing modes
+- VariAudio-style smart pitch controls: Correct Pitch, Flatten Curve, Pitch Drift, Formant, and Volume
+- Scale-aware harmony buttons for diatonic thirds, fourths, fifths, sixths, and octaves
 - Neural pitch detection (FCPE default, RMVPE optional)
 - GAME-based note segmentation with D3PM diffusion model
 - Pitch curve editing with per-note delta, scale, offset, tilt, and variance controls
@@ -41,7 +43,7 @@ PitchNet is a standalone app and audio plugin for editing vocal pitch in a piano
 - Multi-language UI (English, Spanish, Japanese, Korean, Portuguese, Russian, Chinese Simplified, Chinese Traditional)
 
 ## Download
-To [Download PitchNet](https://sessionloops.com/pitchnet#downloads)
+To download Yuo Tune, use the [GitHub Releases](https://github.com/Yuo-Yuo/PitchNet/releases) page.
 
 ## Requirements
 

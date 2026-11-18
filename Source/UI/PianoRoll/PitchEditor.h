@@ -21,6 +21,7 @@ public:
     void setUndoManager(PitchUndoManager* manager) { undoManager = manager; }
     void setCoordinateMapper(CoordinateMapper* mapper) { coordMapper = mapper; }
     void setSnapToSemitoneDragEnabled(bool enabled) { snapToSemitoneDragEnabled = enabled; }
+    void setAbsoluteDragSnap(bool absolute) { absoluteDragSnap = absolute; }
     void setDragSnapMode(DragSnapMode mode) { dragSnapMode = mode; }
     void setPitchReferenceHz(int hz) { pitchReferenceHz = juce::jlimit(420, 450, hz); }
     float getSnappedDragOffset(float rawOffsetSemitones,
@@ -90,6 +91,7 @@ private:
     std::vector<float> originalMidiNotes;
     std::vector<std::vector<float>> originalF0ValuesMulti;
     bool snapToSemitoneDragEnabled = false;
+    bool absoluteDragSnap = true;
     DragSnapMode dragSnapMode = DragSnapMode::Chromatic;
     int pitchReferenceHz = 440;
 

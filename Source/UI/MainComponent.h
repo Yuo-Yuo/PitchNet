@@ -17,6 +17,8 @@
 #include "TrackListPanel.h"
 #include "PianoRollComponent.h"
 #include "PianoRollWorkspaceView.h"
+#include "VariAudioInspector.h"
+#include "../Utils/HarmonyUtils.h"
 #include "SettingsOverlay.h"
 #include "ToolbarComponent.h"
 #include "Workspace/WorkspaceComponent.h"
@@ -406,6 +408,7 @@ private:
   WorkspaceComponent workspace;
   PianoRollComponent pianoRoll;
   PianoRollWorkspaceView pianoRollView;
+  VariAudioInspector variAudioInspector;
   ParameterPanel parameterPanel;
   TrackListPanel trackListPanel; // content of the left side panel
   std::function<void()> onTrackColourModeChanged;
