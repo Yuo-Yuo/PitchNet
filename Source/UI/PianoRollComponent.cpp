@@ -3089,8 +3089,9 @@ void PianoRollComponent::beginInspectorEdit(InspectorParam param)
   inspectorEditParam = param;
   inspectorEditOldParams.clear();
   inspectorEditSourceMidi.clear();
-  for (auto *note : inspectorEditNotes)
+  for (size_t i = 0; i < inspectorEditNotes.size(); ++i)
   {
+    auto *note = inspectorEditNotes[i];
     inspectorEditOldParams.push_back(TransformParams::fromNote(*note));
     // A pitch that is not a 0-100% correction of its reference (older
     // projects, pitch drawing) starts over from where it is, so the slider
@@ -3165,8 +3166,8 @@ void PianoRollComponent::endInspectorEdit()
   // References as they were before the gesture (beginInspectorEdit may have
   // re-anchored them).
   std::vector<float> oldSource;
-  for (const auto &params : oldParams)
-    oldSource.push_back(params.correctionSource);
+  for (size_t i = 0; i < oldParams.size(); ++i)
+    oldSource.push_back(oldParams[i].correctionSource);
   if (project == nullptr || notes.empty())
     return;
 
@@ -3210,8 +3211,9 @@ void PianoRollComponent::endInspectorEdit()
 
   int minFrame = std::numeric_limits<int>::max();
   int maxFrame = std::numeric_limits<int>::min();
-  for (auto *note : notes)
+  for (size_t i = 0; i < notes.size(); ++i)
   {
+    auto *note = notes[i];
     note->markSynthDirty();
     minFrame = std::min(minFrame, note->getStartFrame());
     maxFrame = std::max(maxFrame, note->getEndFrame());
