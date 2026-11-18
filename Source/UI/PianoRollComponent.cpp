@@ -3,6 +3,8 @@
 #include "../Utils/PitchMacroScope.h"
 #include "../Utils/AppLogger.h"
 #include "../Undo/AmplitudeAction.h"
+#include "../Undo/InspectorEditAction.h"
+#include "../Utils/NotePitch.h"
 #include "../Undo/GainEditAction.h"
 #include "../Audio/BreathNotes.h"
 #include "../Utils/BasePitchCurve.h"
@@ -3017,6 +3019,225 @@ void PianoRollComponent::scrollBarMoved(juce::ScrollBar *scrollBar,
     coordMapper->setScrollY(newRangeStart);
   }
   updatePreviewButtonBounds();
+  repaint();
+}
+
+std::vector<Note *> PianoRollComponent::getInspectorTargets() const
+{
+  std::vector<Note *> selected, all;
+  if (project == nullptr)
+    return all;
+  for (auto &note : project->getNotes())
+  {
+    if (note.isRest())
+      continue;
+    all.push_back(&note);
+    if (note.isSelected())
+      selected.push_back(&note);
+  }
+  return selected.empty() ? all : selected;
+}
+
+float PianoRollComponent::correctionTargetFor(float sourceMidi) const
+{
+  if (project != nullptr)
+    return ScaleUtils::correctionTargetFor(*project, sourceMidi, pitchReferenceHz);
+  return ScaleUtils::snapMidiToSemitone(sourceMidi, pitchReferenceHz);
+}
+
+std::optional<float>
+PianoRollComponent::getInspectorValue(InspectorParam param) const
+{
+  const auto targets = getInspectorTargets();
+  if (targets.empty())
+    return std::nullopt;
+  const Note &note = *targets.front();
+  switch (param)
+  {
+    case InspectorParam::CorrectPitch:
+    {
+      // Share of the original deviation from the target pitch that has been
+      // removed: 0% = as sung, 100% = exactly on the semitone/scale tone. A
+      // pitch outside 0-100% shows 0%, which is where a gesture starts from
+      // (beginInspectorEdit re-anchors it), so the slider never jumps.
+      if (project == nullptr)
+        return 0.0f;
+      const auto share = ScaleUtils::correctionShare(
+          *project, note.getLastNonMacroMidiNote(), note.getMidiNote(), pitchReferenceHz);
+      return share ? *share * 100.0f : 0.0f;
+    }
+    case InspectorParam::FlattenCurve:
+      return juce::jlimit(0.0f, 100.0f, (1.0f - note.getVibrato()) * 100.0f);
+    case InspectorParam::PitchDrift:
+      return juce::jlimit(0.0f, 100.0f, (1.0f - note.getPitchDrift()) * 100.0f);
+    case InspectorParam::Formant:
+      return note.getFormantShift();
+    case InspectorParam::Volume:
+      return note.getVolumeDb();
+  }
+  return std::nullopt;
+}
+
+void PianoRollComponent::beginInspectorEdit(InspectorParam param)
+{
+  if (inspectorEditActive)
+    endInspectorEdit();
+  inspectorEditNotes = getInspectorTargets();
+  if (inspectorEditNotes.empty())
+    return;
+  inspectorEditActive = true;
+  inspectorEditParam = param;
+  inspectorEditOldParams.clear();
+  inspectorEditSourceMidi.clear();
+  for (auto *note : inspectorEditNotes)
+  {
+    inspectorEditOldParams.push_back(TransformParams::fromNote(*note));
+    // A pitch that is not a 0-100% correction of its reference (older
+    // projects, pitch drawing) starts over from where it is, so the slider
+    // never jumps. The undo step restores the old reference.
+    if (param == InspectorParam::CorrectPitch && project != nullptr &&
+        !ScaleUtils::correctionShare(*project, note->getLastNonMacroMidiNote(),
+                                     note->getMidiNote(), pitchReferenceHz))
+      NotePitch::setCorrectionSource(*note, note->getMidiNote());
+    inspectorEditSourceMidi.push_back(note->getLastNonMacroMidiNote());
+  }
+}
+
+void PianoRollComponent::setInspectorEditValue(float value)
+{
+  if (!inspectorEditActive || project == nullptr)
+    return;
+
+  int minFrame = std::numeric_limits<int>::max();
+  int maxFrame = std::numeric_limits<int>::min();
+  for (size_t i = 0; i < inspectorEditNotes.size(); ++i)
+  {
+    auto *note = inspectorEditNotes[i];
+    switch (inspectorEditParam)
+    {
+      case InspectorParam::CorrectPitch:
+      {
+        const float source = inspectorEditSourceMidi[i];
+        const float target = correctionTargetFor(source);
+        NotePitch::applyCorrection(
+            *note, target + (source - target) * (1.0f - value / 100.0f));
+        break;
+      }
+      case InspectorParam::FlattenCurve:
+        note->setVibrato(1.0f - value / 100.0f);
+        break;
+      case InspectorParam::PitchDrift:
+        note->setPitchDrift(1.0f - value / 100.0f);
+        break;
+      case InspectorParam::Formant:
+        note->setFormantShift(value);
+        break;
+      case InspectorParam::Volume:
+        // Gain is applied to the audio once, on release (AmplitudeAction).
+        note->setVolumeDb(value);
+        break;
+    }
+    note->markDirty();
+    minFrame = std::min(minFrame, note->getStartFrame());
+    maxFrame = std::max(maxFrame, note->getEndFrame());
+  }
+
+  if (inspectorEditParam != InspectorParam::Volume)
+  {
+    PitchCurveProcessor::rebuildDeltaForNotes(*project, inspectorEditNotes);
+    project->markNoteEditDirtyRange(minFrame, maxFrame);
+    invalidateBasePitchCache();
+    if (onPitchEdited)
+      onPitchEdited();
+  }
+  repaint();
+}
+
+void PianoRollComponent::endInspectorEdit()
+{
+  if (!inspectorEditActive)
+    return;
+  inspectorEditActive = false;
+  auto notes = std::move(inspectorEditNotes);
+  auto oldParams = std::move(inspectorEditOldParams);
+  inspectorEditSourceMidi.clear();
+  inspectorEditNotes.clear();
+  // References as they were before the gesture (beginInspectorEdit may have
+  // re-anchored them).
+  std::vector<float> oldSource;
+  for (const auto &params : oldParams)
+    oldSource.push_back(params.correctionSource);
+  if (project == nullptr || notes.empty())
+    return;
+
+  if (inspectorEditParam == InspectorParam::Volume)
+  {
+    std::vector<float> before, after;
+    for (size_t i = 0; i < notes.size(); ++i)
+    {
+      before.push_back(oldParams[i].volumeDb);
+      after.push_back(notes[i]->getVolumeDb());
+    }
+    if (before == after)
+      return;
+    auto action = std::make_unique<AmplitudeAction>(
+        *project, notes, before, after, pitchToolController->onAmplitudeEdited,
+        "Change Volume");
+    action->redo();
+    if (undoManager)
+      undoManager->addAction(std::move(action));
+    return;
+  }
+
+  std::vector<TransformParams> newParams;
+  std::vector<float> newSource;
+  bool changed = false;
+  for (size_t i = 0; i < notes.size(); ++i)
+  {
+    newParams.push_back(TransformParams::fromNote(*notes[i]));
+    newSource.push_back(notes[i]->getLastNonMacroMidiNote());
+    // A re-anchored reference alone is not an edit.
+    auto compared = newParams.back();
+    compared.correctionSource = oldParams[i].correctionSource;
+    changed |= !(compared == oldParams[i]);
+  }
+  if (!changed)
+  {
+    for (size_t i = 0; i < notes.size(); ++i)
+      NotePitch::setCorrectionSource(*notes[i], oldParams[i].correctionSource);
+    return;
+  }
+
+  int minFrame = std::numeric_limits<int>::max();
+  int maxFrame = std::numeric_limits<int>::min();
+  for (auto *note : notes)
+  {
+    note->markSynthDirty();
+    minFrame = std::min(minFrame, note->getStartFrame());
+    maxFrame = std::max(maxFrame, note->getEndFrame());
+  }
+  PitchCurveProcessor::rebuildBaseFromNotes(*project);
+  project->markNoteEditDirtyRange(minFrame, maxFrame);
+  invalidateBasePitchCache();
+
+  static const char *names[] = {"Correct Pitch", "Flatten Curve", "Pitch Drift",
+                                "Shift Formant", "Change Volume"};
+  if (undoManager)
+    undoManager->addAction(std::make_unique<InspectorEditAction>(
+        project, notes, oldParams, newParams, oldSource, newSource,
+        names[static_cast<int>(inspectorEditParam)]));
+
+  if (onPitchEdited)
+    onPitchEdited();
+  if (onPitchEditFinished)
+    onPitchEditFinished();
+  repaint();
+}
+
+void PianoRollComponent::setShowAllSmartControls(bool showAll)
+{
+  showAllSmartControls = showAll;
+  updatePitchToolHandlesFromSelection();
   repaint();
 }
 
