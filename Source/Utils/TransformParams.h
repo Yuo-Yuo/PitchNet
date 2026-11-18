@@ -13,6 +13,7 @@ struct TransformParams
     float tiltRight = 0.0f;
     float formantShift = 0.0f;
     float volumeDb = 0.0f;
+    float sibilantBalance = 0.0f;
     float vibrato = 1.0f;
     float pitchDrift = 1.0f;
     int smoothLeftFrames = 0;
@@ -33,6 +34,7 @@ struct TransformParams
         p.tiltRight = note.getTiltRight();
         p.formantShift = note.getFormantShift();
         p.volumeDb = note.getVolumeDb();
+        p.sibilantBalance = note.getSibilantBalance();
         p.vibrato = note.getVibrato();
         p.pitchDrift = note.getPitchDrift();
         p.smoothLeftFrames = note.getSmoothLeftFrames();
@@ -54,6 +56,7 @@ struct TransformParams
         note.setPitchDrift(pitchDrift);
         note.setFormantShift(formantShift);
         note.setVolumeDb(volumeDb);
+        note.setSibilantBalance(sibilantBalance);
         note.setSmoothLeftFrames(smoothLeftFrames);
         note.setSmoothRightFrames(smoothRightFrames);
         note.setDeltaScale(deltaScale);
@@ -66,6 +69,7 @@ struct TransformParams
                tiltRight == other.tiltRight &&
                formantShift == other.formantShift &&
                volumeDb == other.volumeDb &&
+               sibilantBalance == other.sibilantBalance &&
                vibrato == other.vibrato &&
                pitchDrift == other.pitchDrift &&
                smoothLeftFrames == other.smoothLeftFrames &&
@@ -87,6 +91,7 @@ struct TransformParams
                tiltRight == 0.0f &&
                formantShift == 0.0f &&
                volumeDb == 0.0f &&
+               sibilantBalance == 0.0f &&
                vibrato == 1.0f &&
                pitchDrift == 1.0f &&
                smoothLeftFrames == 0 &&
