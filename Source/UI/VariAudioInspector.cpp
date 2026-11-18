@@ -335,6 +335,7 @@ VariAudioInspector::~VariAudioInspector()
 
 void VariAudioInspector::refreshLocalisedText()
 {
+    harmonyPanel.refreshLocalisedText();
     variAudioHeader.setText(TR("inspector.variaudio"), juce::dontSendNotification);
     smartControlsLabel.setText(TR("inspector.smart_controls"), juce::dontSendNotification);
     snapModeLabel.setText(TR("inspector.snap_mode"), juce::dontSendNotification);
