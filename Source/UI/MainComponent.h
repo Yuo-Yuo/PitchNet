@@ -18,6 +18,7 @@
 #include "PianoRollComponent.h"
 #include "PianoRollWorkspaceView.h"
 #include "VariAudioInspector.h"
+#include "../Utils/HarmonyUtils.h"
 #include "SettingsOverlay.h"
 #include "ToolbarComponent.h"
 #include "Workspace/WorkspaceComponent.h"
