@@ -8,7 +8,6 @@
 #include "../Models/Project.h"
 #include "../Utils/Localization.h"
 #include "Components/StyledWidgets.h"
-#include "HarmonyPanel.h"
 #include <array>
 #include <functional>
 #include <optional>
@@ -39,7 +38,6 @@ public:
     /** Re-reads snap state and slider values now (they are also polled). */
     void refresh() { refreshFromProject(); }
 
-    HarmonyPanel& getHarmonyPanel() { return harmonyPanel; }
 
     // Asked on every refresh; never cached (see HarmonyPanel).
     std::function<Project*()> getCurrentProject;
@@ -133,7 +131,6 @@ private:
     int shownRootId = 0;
     int shownModeId = 0;
 
-    HarmonyPanel harmonyPanel; // draws its own card and title
 
     LocalisationWatcher languageWatcher{[this] { refreshLocalisedText(); }};
 
