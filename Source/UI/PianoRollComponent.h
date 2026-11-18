@@ -566,7 +566,6 @@ private:
   bool modifierPanDragActive = false;
   juce::Point<float> modifierPanLastPosition;
   bool pianoKeyAuditionMouseDown = false;
-  bool middleButtonScrubActive = false;
   MainViewRegionPreviewList regionPreviews;
   bool trackViewMode = false;
   double regionPreviewsEndSeconds = 0.0;
