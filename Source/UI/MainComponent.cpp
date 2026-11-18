@@ -851,6 +851,7 @@ MainComponent::MainComponent(bool enableAudioDevice)
   variAudioInspector.onEditorScaleChanged = [this]
   {
     pianoRoll.refreshScaleFromProject();
+    variAudioInspector.getHarmonyPanel().refreshProject();
     parameterPanel.updateGlobalSliders();
     notifyProjectDataChanged();
   };
