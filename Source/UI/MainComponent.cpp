@@ -843,6 +843,10 @@ MainComponent::MainComponent(bool enableAudioDevice)
     parameterPanel.updateGlobalSliders();
     notifyProjectDataChanged();
   };
+  auto &harmonyPanel = variAudioInspector.getHarmonyPanel();
+  harmonyPanel.onHarmonyRequested =
+      [this](HarmonyUtils::Interval interval, bool up)
+  { return pianoRoll.applyHarmonyInterval(interval, up); };
   variAudioInspector.isProjectKeyScope = [this] { return isTrackViewMode(); };
   variAudioInspector.onEditorScaleChanged = [this]
   {
