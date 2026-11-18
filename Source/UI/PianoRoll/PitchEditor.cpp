@@ -9,6 +9,18 @@ PitchEditor::PitchEditor() = default;
 float PitchEditor::getSnappedDragOffset(float rawOffsetSemitones,
                                         float anchorMidiNote) const
 {
+  if (absoluteDragSnap)
+  {
+    const float targetMidi = anchorMidiNote + rawOffsetSemitones;
+    if (dragSnapMode == DragSnapMode::Scale && project != nullptr)
+    {
+      const ScaleMode mode = project->getPreferredScaleMode();
+      const int root = project->getScaleRootNote();
+      if (mode != ScaleMode::None && mode != ScaleMode::Chromatic && root >= 0)
+        return ScaleUtils::snapMidiToScale(targetMidi, mode, root, pitchReferenceHz) - anchorMidiNote;
+    }
+    return ScaleUtils::snapMidiToSemitone(targetMidi, pitchReferenceHz) - anchorMidiNote;
+  }
   const int roundedOffset = static_cast<int>(std::round(rawOffsetSemitones));
   if (dragSnapMode != DragSnapMode::Scale || project == nullptr)
     return static_cast<float>(roundedOffset);
