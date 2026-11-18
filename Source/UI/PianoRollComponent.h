@@ -5,6 +5,7 @@
 #include "../Models/Project.h"
 #include "../Utils/Constants.h"
 #include "../Utils/Localization.h"
+#include "../Utils/HarmonyUtils.h"
 #include "../Utils/BasePitchPreview.h"
 #include "../Undo/UndoActions.h"
 #include "Commands.h"
@@ -96,6 +97,16 @@ public:
 
   // Project
   void setProject(Project *proj);
+  enum class InspectorParam { CorrectPitch, FlattenCurve, PitchDrift, Formant, Volume };
+  std::vector<Note *> getInspectorTargets() const;
+  std::optional<float> getInspectorValue(InspectorParam param) const;
+  void beginInspectorEdit(InspectorParam param);
+  void setInspectorEditValue(float value);
+  void endInspectorEdit();
+  bool isInspectorEditActive() const { return inspectorEditActive; }
+  void setShowAllSmartControls(bool showAll);
+  bool getShowAllSmartControls() const { return showAllSmartControls; }
+  HarmonyUtils::Result applyHarmonyInterval(HarmonyUtils::Interval interval, bool up);
   void beginLiveRecordingWaveform(double sampleRate,
                                   double timelineOffsetSeconds);
   void appendLiveRecordingWaveform(const juce::AudioBuffer<float> &buffer);
