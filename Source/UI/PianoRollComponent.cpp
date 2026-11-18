@@ -3396,6 +3396,11 @@ void PianoRollComponent::setScaleModePreview(std::optional<ScaleMode> mode)
   repaint();
 }
 
+void PianoRollComponent::setAbsoluteDragSnap(bool absolute)
+{
+  pitchEditor->setAbsoluteDragSnap(absolute);
+}
+
 void PianoRollComponent::setSnapToSemitoneDrag(bool enabled)
 {
   if (snapToSemitoneDrag == enabled)
