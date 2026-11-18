@@ -76,7 +76,12 @@ jobs:
             New-Item -ItemType Directory -Force -Path "package-nomodels/models" | Out-Null
           }
 
-          if (-not (Test-Path "package/Yuo Tune.exe")) { throw "Yuo Tune.exe was not produced" }
+          # Normalize the standalone executable name in case JUCE keeps the CMake target name.
+          $appExe = Get-ChildItem -Path "package" -File -Filter "*.exe" | Select-Object -First 1
+          if ($null -eq $appExe) { throw "Standalone Yuo Tune executable was not produced" }
+          if ($appExe.Name -ne "Yuo Tune.exe") {
+            Rename-Item -Path $appExe.FullName -NewName "Yuo Tune.exe"
+          }
           choco install innosetup --yes --no-progress
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /DAppVersion=0.8.1 installer\YuoTune.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
