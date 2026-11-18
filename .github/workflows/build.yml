@@ -2,7 +2,7 @@ name: Build Yuo Tune
 
 on:
   push:
-    branches: [main, master, refactor]
+    branches: [main, master, refactor, "feature/**"]
     tags:
       - "v*"
   pull_request:
