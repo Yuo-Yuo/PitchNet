@@ -6,6 +6,7 @@
 #include "../Utils/Constants.h"
 #include "../Utils/Localization.h"
 #include "../Utils/BasePitchPreview.h"
+#include "../Utils/TransformParams.h"
 #include "../Undo/UndoActions.h"
 #include "Commands.h"
 #include "PianoRoll/BoxSelector.h"
