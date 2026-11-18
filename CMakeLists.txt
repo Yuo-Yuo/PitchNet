@@ -241,16 +241,16 @@ option(PITCHNET_ARA_DIAGNOSTICS "Log ARA model-graph and render diagnostics" OFF
 option(PITCHNET_CAPTURE_DIAGNOSTICS "Log non-ARA capture lifecycle diagnostics" OFF)
 
 if(PITCHNET_DEV_BUILD)
-    set(PITCHNET_PRODUCT_NAME "PitchNet Dev")
-    set(PITCHNET_BUNDLE_ID "com.sessionloops.pitchnet.dev")
+    set(PITCHNET_PRODUCT_NAME "Yuo Tune Dev")
+    set(PITCHNET_BUNDLE_ID "com.yuotune.app.dev")
     set(PITCHNET_PLUGIN_CODE PTD1)
     message(STATUS
         "PitchNet: side-by-side DEV build "
         "(product '${PITCHNET_PRODUCT_NAME}', plugin code ${PITCHNET_PLUGIN_CODE}, "
         "bundle id ${PITCHNET_BUNDLE_ID})")
 else()
-    set(PITCHNET_PRODUCT_NAME "PitchNet")
-    set(PITCHNET_BUNDLE_ID "com.sessionloops.pitchnet")
+    set(PITCHNET_PRODUCT_NAME "Yuo Tune")
+    set(PITCHNET_BUNDLE_ID "com.yuotune.app")
     set(PITCHNET_PLUGIN_CODE PTE1)
 endif()
 
@@ -266,8 +266,8 @@ option(PITCHNET_SYNTH_NOTE_DIAGNOSTICS "Log one line per dirty note on every syn
 # Create GUI application
 juce_add_gui_app(PitchNet
     PRODUCT_NAME "${PITCHNET_PRODUCT_NAME}"
-    COMPANY_NAME "Session Loops"
-    COMPANY_WEBSITE "https://sessionloops.com"
+    COMPANY_NAME "Yuo Tune"
+    COMPANY_WEBSITE "https://github.com/Yuo-Yuo/PitchNet"
     BUNDLE_ID "${PITCHNET_BUNDLE_ID}"
     COMPANY_COPYRIGHT "Copyright 2026"
     ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/Resources/images/icon.png"
