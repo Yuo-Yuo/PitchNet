@@ -355,5 +355,18 @@
   "inspector.volume": "Volume",
   "inspector.target_none": "No segments",
   "inspector.target_selected": "Target: {n} selected segment(s)",
-  "inspector.target_all": "Target: all segments ({n})"
+  "inspector.target_all": "Target: all segments ({n})",
+  "harmony.title": "Harmony",
+  "harmony.third": "3rd",
+  "harmony.fourth": "4th",
+  "harmony.fifth": "5th",
+  "harmony.sixth": "6th",
+  "harmony.octave": "Octave",
+  "harmony.up": "Up",
+  "harmony.down": "Down",
+  "harmony.hint": "No selection = all notes",
+  "harmony.no_notes": "No notes to move",
+  "harmony.scale_unsupported": "Pick a 7-note key for degrees",
+  "harmony.partly_out_of_range": "Some notes would leave the range and were kept",
+  "harmony.out_of_range": "Out of range: nothing moved"
 }
