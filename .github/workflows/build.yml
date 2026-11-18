@@ -419,7 +419,7 @@ jobs:
 
       - name: Prepare Package
         run: |
-          mkdir -p package/PitchNet
+          mkdir -p package/Yuo-Tune
 
           # Copy standalone app
           cp -R build/PitchNet_artefacts/${{ env.BUILD_TYPE }}/* package/Yuo-Tune/
@@ -442,7 +442,7 @@ jobs:
           rm -rf package-nomodels
           cp -R package package-nomodels
           find package-nomodels -type d -name models -exec sh -c 'rm -rf "$1"/*' _ {} \;
-          mkdir -p package-nomodels/PitchNet/models
+          mkdir -p package-nomodels/Yuo-Tune/models
 
           # Create tarball
           cd package
@@ -517,7 +517,7 @@ jobs:
 
       - name: Prepare Package
         run: |
-          mkdir -p package/PitchNet
+          mkdir -p package/Yuo-Tune
 
           # Copy standalone app
           cp -R build/PitchNet_artefacts/${{ env.BUILD_TYPE }}/* package/Yuo-Tune/
@@ -540,7 +540,7 @@ jobs:
           rm -rf package-nomodels
           cp -R package package-nomodels
           find package-nomodels -type d -name models -exec sh -c 'rm -rf "$1"/*' _ {} \;
-          mkdir -p package-nomodels/PitchNet/models
+          mkdir -p package-nomodels/Yuo-Tune/models
 
           # Create tarball
           cd package
