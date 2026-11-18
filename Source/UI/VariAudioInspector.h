@@ -8,6 +8,7 @@
 #include "../Models/Project.h"
 #include "../Utils/Localization.h"
 #include "Components/StyledWidgets.h"
+#include "HarmonyPanel.h"
 #include <array>
 #include <functional>
 #include <optional>
@@ -34,6 +35,7 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
 
+    HarmonyPanel& getHarmonyPanel() { return harmonyPanel; }
     void refreshLocalisedText();
     /** Re-reads snap state and slider values now (they are also polled). */
     void refresh() { refreshFromProject(); }
@@ -105,6 +107,7 @@ private:
     std::unique_ptr<ComboLookAndFeel> comboLookAndFeel;
     juce::Viewport viewport;
     Content content{*this};
+    HarmonyPanel harmonyPanel;
 
     juce::Label variAudioHeader;
     juce::Label smartControlsLabel;
