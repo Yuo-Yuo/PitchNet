@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cmath>
 #include <limits>
+#include <optional>
 
 namespace ScaleUtils
 {
