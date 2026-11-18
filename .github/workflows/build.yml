@@ -35,10 +35,16 @@ jobs:
           Invoke-WebRequest -Uri "https://github.com/mdkrain/HachiTune/releases/download/Resources%2Fmodels/rmvpe.onnx" -OutFile "Resources/models/rmvpe.onnx"
 
       - name: Configure CMake
-        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DUSE_DIRECTML=OFF -DUSE_ASIO=ON -DENABLE_NOTE_STRETCH=OFF
+        run: cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DUSE_DIRECTML=OFF -DUSE_ASIO=ON -DENABLE_NOTE_STRETCH=OFF -DPITCHNET_BUILD_TESTS=ON
 
-      - name: Build
-        run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel
+      - name: Build app and VST3
+        run: cmake --build build --config ${{ env.BUILD_TYPE }} --target PitchNet PitchNetPlugin_VST3 --parallel
+
+      - name: Build regression tests
+        run: cmake --build build --config ${{ env.BUILD_TYPE }} --target PluginStateArchiveTests HarmonyIntervalTests HarmonyApplyTests --parallel
+
+      - name: Run ARA archive and harmony tests
+        run: ctest --test-dir build -C ${{ env.BUILD_TYPE }} --output-on-failure -R "PluginStateArchiveTests|HarmonyIntervalTests|HarmonyApplyTests"
 
       - name: Prepare Package
         shell: pwsh
